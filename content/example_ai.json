@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "seed_url": "https://example.com",
+    "strategy": "auto",
+    "ai_extracted": true
+  },
+  "total_pages": 1,
+  "data": [
+    {
+      "url": "https://example.com/",
+      "final_url": "https://example.com/",
+      "status_code": 200,
+      "content_type": "text/html",
+      "title": "Example Domain",
+      "markdown": "# Example Domain\n\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\n\n[Learn more](<https://iana.org/domains/example>)",
+      "raw_html_size": 559,
+      "cleaned_markdown_size": 169,
+      "metadata": {
+        "title": "Example Domain",
+        "description": null,
+        "canonical": null,
+        "author": null,
+        "keywords": [],
+        "og_title": null,
+        "og_description": null,
+        "og_image": null,
+        "og_type": null,
+        "twitter_card": null,
+        "json_ld": []
+      },
+      "internal_links": [],
+      "external_links": [
+        "https://iana.org/domains/example"
+      ],
+      "strategy_used": "http",
+      "elapsed_seconds": 0.17993998527526855,
+      "crawled_at": "2026-09-20T16:00:09.815441",
+      "error": null,
+      "confidence": "HIGH"
+    }
+  ]
+}
