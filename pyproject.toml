@@ -3,25 +3,28 @@ requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ethical-crawler"
-version = "0.1.0"
-description = "A production-grade, open-source, ethical AI-native web crawler adhering to the 4 rules of ethical crawling with LLM-friendly extraction"
+name = "odin-eye"
+version = "1.0.0"
+description = "The All-Seeing Ethical AI Crawler & Autonomous Full-Stack Reverse-Engineering Engine"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Nikhil Alakri"}
+    {name = "Nikhil Alakri", email = "nikhilalakri101@gmail.com"}
 ]
 keywords = [
+    "odin-eye",
     "web-crawler",
-    "web-scraper",
-    "ethical-crawling",
+    "reverse-engineering",
+    "system-architecture",
+    "multimodal-ai",
     "robots-txt",
     "sitemap",
-    "crawl4ai",
-    "llm",
+    "chromadb",
+    "rag",
     "nvidia-nim",
-    "fastapi"
+    "fastapi",
+    "playwright"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

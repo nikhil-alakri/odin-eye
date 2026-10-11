@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/nikhil-alakri/odin-eye/stargazers"><img src="https://img.shields.io/github/stars/nikhil-alakri/odin-eye?style=for-the-badge&logo=github&color=38bdf8" alt="GitHub Stars"/></a>
+  <a href="https://github.com/nikhil-alakri/odin-eye/releases"><img src="https://img.shields.io/badge/Version-v1.0.0-f59e0b.svg?style=for-the-badge" alt="Version"/></a>
   <a href="https://github.com/nikhil-alakri/odin-eye/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-emerald.svg?style=for-the-badge" alt="License"/></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue.svg?style=for-the-badge&logo=python" alt="Python Version"/></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688.svg?style=for-the-badge&logo=fastapi" alt="FastAPI"/></a>
