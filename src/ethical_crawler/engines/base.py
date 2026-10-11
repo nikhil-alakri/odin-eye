@@ -1,5 +1,7 @@
 """Base interface for web crawling engines."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -24,3 +26,11 @@ class CrawlEngine(ABC):
     async def close(self) -> None:
         """Clean up resources, sessions, or browser instances."""
         pass
+
+    async def __aenter__(self) -> CrawlEngine:
+        """Enter async context."""
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit async context and close resources."""
+        await self.close()

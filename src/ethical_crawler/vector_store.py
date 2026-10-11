@@ -295,8 +295,9 @@ class VectorStoreManager:
             return []
 
         try:
+            # Retrieve all metadata records (lightweight, excludes embeddings/docs)
+            # so we sort newest first across the entire store before applying limit.
             records = self.collection.get(
-                limit=limit,
                 include=["metadatas"],
             )
         except Exception as exc:
@@ -331,7 +332,7 @@ class VectorStoreManager:
 
         # Sort newest first
         pages.sort(key=lambda x: str(x.get("crawled_at", "")), reverse=True)
-        return pages
+        return pages[:limit] if limit else pages
 
     def delete_page(self, url: str) -> bool:
         """Safely delete a single crawled page from ChromaDB by URL."""
@@ -499,6 +500,18 @@ class VectorStoreManager:
         settings = get_settings()
         from openai import AsyncOpenAI
 
+        from ethical_crawler.knowledge.ask_cache import AskAnswerCache
+
+        cache = AskAnswerCache(Path(settings.chroma_dir).parent / "ask_cache.json")
+        cached = cache.lookup(question)
+        if cached and cached.get("answer"):
+            return {
+                "answer": cached["answer"],
+                "sources": cached.get("sources") or [],
+                "cached": True,
+                "matched_question": cached.get("question", question),
+            }
+
         # 1. Semantic search for context
         matches = self.semantic_search(question, n_results=n_context)
         if not matches:
@@ -522,8 +535,9 @@ class VectorStoreManager:
             f"You are an AI assistant answering questions using information from crawled web pages.\n\n"
             f"Context from crawled websites:\n{context_str}\n\n"
             f"User Question: {question}\n\n"
-            f"Provide a clear, accurate, and concise answer strictly based on the context above. "
-            f"Cite the relevant source URLs where applicable."
+            f"Write a clear answer in plain sentences. Use a numbered list only when listing features. "
+            f"Do not use markdown bold, asterisks, or headings. "
+            f"Put a source number like [1] after a claim when it comes from that source."
         )
 
         if not settings.ai_api_key:
@@ -554,10 +568,13 @@ class VectorStoreManager:
                 f"- {s['title']}: {s['url']}" for s in sources
             )
 
-        return {
+        result = {
             "answer": answer,
             "sources": sources,
+            "cached": False,
         }
+        cache.store(question, answer, sources)
+        return result
 
 
 # Singleton instance

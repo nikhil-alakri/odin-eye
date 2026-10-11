@@ -4,10 +4,32 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 
+from ethical_crawler.api.theme import (
+    DEFAULT_THEME_ID,
+    THEMES,
+    generate_google_fonts_link,
+    generate_root_css,
+    get_themes_json,
+)
 from ethical_crawler.api.v1.router import router as api_v1_router
 from ethical_crawler.config import get_settings
 
+from contextlib import asynccontextmanager
+from ethical_crawler.scheduler import get_schedule_manager
+
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager starting background workers."""
+    schedule_mgr = get_schedule_manager()
+    schedule_mgr.start()
+    try:
+        yield
+    finally:
+        schedule_mgr.stop()
+
 
 app = FastAPI(
     title="Ethical AI-Native Web Crawler",
@@ -15,6 +37,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -45,48 +68,48 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRAWL // ETHIC — Autonomous Web Ingestion Node</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  __GOOGLE_FONTS__
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <script>
+    // Immediate early theme application to eliminate FOUC
+    (function initEarlyTheme() {
+      try {
+        const saved = localStorage.getItem('ethic_user_theme');
+        if (saved) {
+          const t = JSON.parse(saved);
+          if (t && t.tokens) {
+            const root = document.documentElement;
+            for (const [k, v] of Object.entries(t.tokens)) {
+              root.style.setProperty(k, v);
+            }
+          }
+          if (t && t.fonts) {
+            if (t.fonts.heading) document.documentElement.style.setProperty('--ds-font-heading', t.fonts.heading);
+            if (t.fonts.sans) document.documentElement.style.setProperty('--ds-font-sans', t.fonts.sans);
+            if (t.fonts.mono) document.documentElement.style.setProperty('--ds-font-mono', t.fonts.mono);
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
   <style>
-    :root {
-      --ds-bg: #fcf8f8;
-      --ds-surface: #fcf8f8;
-      --ds-surface-container: #f0edec;
-      --ds-surface-container-low: #f6f3f2;
-      --ds-surface-container-high: #ebe7e7;
-      --ds-surface-container-highest: #e5e2e1;
-      --ds-on-surface: #1c1b1b;
-      --ds-on-surface-variant: #444932;
-      --ds-outline: #757a60;
-      --ds-primary: #536600;
-      --ds-primary-container: #d4ff00;
-      --ds-on-primary-container: #5f7400;
-      --ds-secondary: #00677f;
-      --ds-secondary-container: #00d2ff;
-      --ds-tertiary: #bd0042;
-      --ds-error: #ba1a1a;
-      --ds-error-container: #ffdad6;
-      --ds-border: #e5e2e1;
-      --ds-shadow: 0 1px 3px rgba(28, 27, 27, 0.06), 0 4px 12px rgba(28, 27, 27, 0.04);
-    }
+    __ROOT_THEME_CSS__
     html {
       background-color: var(--ds-bg);
     }
     body.app-shell {
-      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      font-family: var(--ds-font-sans, 'Plus Jakarta Sans', system-ui, sans-serif);
       color: var(--ds-on-surface);
       background-color: var(--ds-bg);
       background-image: none;
     }
     h1, h2, h3, h4, .glow-heading {
-      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-family: var(--ds-font-heading, 'Space Grotesk', system-ui, sans-serif);
       color: var(--ds-on-surface);
     }
     code, pre, .font-mono, .status-pill, .data-table th, .ethic-label {
-      font-family: 'Space Mono', ui-monospace, monospace;
+      font-family: var(--ds-font-mono, 'Space Mono', ui-monospace, monospace);
     }
     * {
       scrollbar-color: var(--ds-outline) var(--ds-surface-container-low);
@@ -98,10 +121,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       ::-webkit-scrollbar-track { background: var(--ds-surface-container-low); }
     }
     .glass-card {
-      background: #ffffff;
+      background: var(--ds-card-bg, #ffffff);
       color: var(--ds-on-surface);
       border: 1px solid var(--ds-border);
-      border-radius: 0.75rem;
+      border-radius: var(--ds-radius, 0.75rem);
       box-shadow: var(--ds-shadow);
     }
     .glass-card-subtle {
@@ -211,7 +234,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       justify-content: center;
       background: var(--ds-primary-container);
       color: var(--ds-on-surface);
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--ds-font-heading);
       font-weight: 700;
       letter-spacing: 0.02em;
       font-size: 13px;
@@ -228,7 +251,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .hud-tab-active {
       background: var(--ds-primary-container);
       color: var(--ds-on-surface);
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--ds-font-heading);
       font-weight: 700;
       border: 1px solid var(--ds-on-surface);
       border-radius: 0.5rem;
@@ -237,7 +260,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .hud-tab-history {
       background: var(--ds-primary-container);
       color: var(--ds-on-surface);
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: var(--ds-font-heading);
       font-weight: 700;
       border: 1px solid var(--ds-on-surface);
       border-radius: 0.5rem;
@@ -328,7 +351,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       border-radius: 0.5rem !important;
       color: var(--ds-on-surface) !important;
       box-shadow: none !important;
-      font-family: 'Plus Jakarta Sans', sans-serif !important;
+      font-family: var(--ds-font-sans) !important;
       font-size: 13px !important;
     }
     .modal-overlay {
@@ -553,6 +576,224 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       border-top: 1px solid var(--ds-border);
       color: var(--ds-on-surface-variant);
     }
+    .dossier-modal-card {
+      background: #ffffff;
+      border: 1px solid var(--ds-border);
+      color: var(--ds-on-surface);
+    }
+    .dossier-domain-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.65rem;
+      background: #ffffff;
+      border: 1px solid var(--ds-border);
+      border-radius: 0.5rem;
+      font-size: 11px;
+      color: var(--ds-on-surface);
+      cursor: pointer;
+    }
+    .dossier-domain-chip:hover { background: var(--ds-surface-container-low); }
+    .dossier-domain-chip input { accent-color: var(--ds-primary); }
+    .dossier-domain-chip .domain-name {
+      font-family: 'Space Mono', monospace;
+      color: var(--ds-on-surface);
+    }
+    .preview-modal-fullscreen {
+      position: fixed !important;
+      inset: 0.75rem !important;
+      width: calc(100vw - 1.5rem) !important;
+      max-width: none !important;
+      height: calc(100vh - 1.5rem) !important;
+      max-height: none !important;
+      border-radius: 1rem !important;
+      z-index: 60 !important;
+    }
+    .preview-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--ds-border);
+      background: #ffffff;
+      color: var(--ds-on-surface-variant);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .preview-tab:hover {
+      background: var(--ds-surface-container-low);
+      color: var(--ds-on-surface);
+      border-color: var(--ds-outline);
+    }
+    .preview-tab-on {
+      background: var(--ds-primary-container) !important;
+      color: var(--ds-on-surface) !important;
+      border-color: var(--ds-on-surface) !important;
+      box-shadow: 1px 1px 0 var(--ds-on-surface);
+    }
+    .preview-reading {
+      color: var(--ds-on-surface);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+    .preview-reading h1, .preview-reading h2, .preview-reading h3, .preview-reading h4 {
+      font-family: 'Space Grotesk', sans-serif;
+      line-height: 1.3;
+    }
+    .preview-reading h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 1.35rem 0 0.6rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 2px solid var(--ds-border);
+      color: var(--ds-on-surface);
+    }
+    .preview-reading h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 1.15rem 0 0.45rem;
+      color: var(--ds-primary);
+    }
+    .preview-reading h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 0.95rem 0 0.35rem;
+      color: var(--ds-secondary);
+    }
+    .preview-reading h4 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0.8rem 0 0.3rem;
+      color: var(--ds-on-surface);
+    }
+    .preview-reading p {
+      margin: 0.6rem 0;
+      color: var(--ds-on-surface);
+    }
+    .preview-reading ul {
+      margin: 0.5rem 0 0.75rem 1.35rem;
+      list-style: disc;
+    }
+    .preview-reading ol {
+      margin: 0.5rem 0 0.75rem 1.35rem;
+      list-style: decimal;
+    }
+    .preview-reading li {
+      margin: 0.3rem 0;
+      color: var(--ds-on-surface);
+    }
+    .preview-reading a, .preview-link {
+      color: var(--ds-secondary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      font-weight: 500;
+      transition: color 0.12s ease;
+    }
+    .preview-reading a:hover, .preview-link:hover {
+      color: var(--ds-primary);
+    }
+    .preview-reading strong {
+      font-weight: 700;
+      color: var(--ds-on-surface);
+    }
+    .preview-reading blockquote {
+      border-left: 3px solid var(--ds-primary);
+      padding: 0.5rem 0.9rem;
+      margin: 0.85rem 0;
+      background: var(--ds-surface-container-low);
+      border-radius: 0 0.5rem 0.5rem 0;
+      color: var(--ds-on-surface-variant);
+      font-style: italic;
+    }
+    .preview-reading hr {
+      margin: 1.25rem 0;
+      border: 0;
+      border-top: 1px solid var(--ds-border);
+    }
+    .preview-inline-code {
+      background: var(--ds-surface-container-low);
+      color: var(--ds-secondary);
+      padding: 0.15rem 0.35rem;
+      border-radius: 0.25rem;
+      font-family: 'Space Mono', monospace;
+      font-size: 0.82em;
+      border: 1px solid var(--ds-border);
+    }
+    .preview-code-block {
+      margin: 0.9rem 0;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      border: 1px solid #1e293b;
+      background: #020617;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    .preview-code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.45rem 0.85rem;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .preview-code-pre {
+      padding: 0.9rem 1.1rem;
+      margin: 0;
+      overflow-x: auto;
+      color: #f1f5f9;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .preview-md-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.9rem 0;
+      font-size: 12px;
+      background: #ffffff;
+      border: 1px solid var(--ds-border);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    .preview-md-table th {
+      background: var(--ds-surface-container-low);
+      color: var(--ds-on-surface);
+      padding: 0.55rem 0.85rem;
+      font-weight: 700;
+      font-family: 'Space Mono', monospace;
+      text-align: left;
+      border-bottom: 2px solid var(--ds-border);
+    }
+    .preview-md-table td {
+      padding: 0.5rem 0.85rem;
+      border-bottom: 1px solid var(--ds-border);
+      color: var(--ds-on-surface);
+    }
+    .preview-md-table tr:last-child td {
+      border-bottom: none;
+    }
+    .preview-md-table tr:hover td {
+      background: var(--ds-surface-container-low);
+    }
+    .ask-answer p { margin: 0 0 0.55rem; }
+    .ask-answer ol { margin: 0.25rem 0 0.6rem 1.15rem; list-style: decimal; }
+    .ask-answer li { margin: 0.35rem 0; }
+    .ask-answer strong { font-weight: 700; }
+    .dossier-markdown-view {
+      background: var(--ds-surface-container-low);
+      border: 1px solid var(--ds-border);
+      color: var(--ds-on-surface);
+      font-family: 'Space Mono', ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body class="app-shell min-h-screen font-sans selection:bg-[#d4ff00] selection:text-[#1c1b1b]">
@@ -574,6 +815,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span id="engineVersionBadge" class="px-2.5 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider text-ds-accent border border-ds rounded bg-ds-surface-low">ETHIC ENGINE V1.4</span>
+          <button type="button" id="headerThemeBtn" onclick="openThemeStudioModal()" aria-haspopup="dialog" aria-expanded="false" aria-controls="themeStudioModal"
+                  class="px-3 py-1.5 text-ds-accent border border-ds rounded text-[10px] font-mono font-semibold flex items-center gap-1.5 hover:bg-ds-surface-low bg-ds-surface-low transition-all">
+            <i class="fa-solid fa-palette text-[10px] text-purple-600" aria-hidden="true"></i>
+            <span>THEME & DESIGN</span>
+            <span id="activeThemePill" class="px-1.5 py-0.5 rounded text-[9px] bg-white border border-ds text-slate-700 font-mono">Light HUD</span>
+          </button>
+          <button type="button" id="headerSchedulesBtn" onclick="openSchedulesModal()" aria-haspopup="dialog" aria-expanded="false" aria-controls="schedulesModal"
+                  class="px-3 py-1.5 text-ds-accent border border-ds rounded text-[10px] font-mono font-semibold flex items-center gap-1.5 hover:bg-ds-surface-low bg-ds-surface-low transition-all">
+            <i class="fa-solid fa-clock text-[10px] text-blue-600" aria-hidden="true"></i>
+            <span>MONITORS</span>
+            <span id="headerSchedulesCount" class="px-1.5 py-0.5 rounded text-[9px] bg-white border border-ds text-slate-700 font-mono">0</span>
+          </button>
+          <button type="button" id="headerBenchmarkBtn" onclick="openCompetitorModal()" aria-haspopup="dialog" aria-expanded="false" aria-controls="competitorModal"
+                  class="px-3 py-1.5 text-ds-accent border border-ds rounded text-[10px] font-mono font-semibold flex items-center gap-1.5 hover:bg-ds-surface-low bg-ds-surface-low transition-all">
+            <i class="fa-solid fa-chart-simple text-[10px] text-amber-600" aria-hidden="true"></i>
+            <span>BENCHMARK</span>
+          </button>
+          <button type="button" id="headerBlueprintBtn" onclick="openBlueprintModal()" aria-haspopup="dialog" aria-expanded="false" aria-controls="blueprintModal"
+                  class="px-3 py-1.5 text-ds-accent border border-ds rounded text-[10px] font-mono font-semibold flex items-center gap-1.5 hover:bg-ds-surface-low bg-ds-surface-low transition-all">
+            <i class="fa-solid fa-camera-retro text-[10px] text-teal-600" aria-hidden="true"></i>
+            <span>BLUEPRINT</span>
+          </button>
           <button type="button" id="headerStoreBadge" onclick="openChromaStoreModal()" aria-haspopup="dialog" aria-expanded="false" aria-controls="chromaStoreModal"
                   class="px-3 py-1.5 text-ds-accent border border-ds rounded text-[10px] font-mono font-semibold flex items-center gap-2 hover:bg-ds-surface-low bg-ds-surface-low">
             <span class="w-1.5 h-1.5 rounded-full status-dot-active" aria-hidden="true"></span>
@@ -739,10 +1002,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           <details class="mt-4 text-[10px]">
             <summary class="ethic-label cursor-pointer hover:text-ds-accent">Advanced / RPA / AI</summary>
             <div class="mt-3 space-y-3">
-              <div id="crawlAiConfigSection" class="hidden space-y-2.5 p-3 rounded border border-ds">
+              <div id="crawlAiConfigSection" class="hidden space-y-3 p-3 rounded-xl border border-ds bg-[#fafafa]">
                 <div>
-                  <label class="block text-[11px] font-semibold text-slate-300 mb-1">AI Schema Template</label>
-                  <select id="crawlAiSchema" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
+                  <label class="ethic-label block mb-1">AI Schema Template</label>
+                  <select id="crawlAiSchema" class="w-full px-3 py-1.5 text-xs">
                     <option value="company_profile">🏢 Company & Product Intelligence (What they do, Offerings, Market Purpose)</option>
                     <option value="article">Article / Blog Post (Title, Summary, Key Points)</option>
                     <option value="product">Product / Pricing / Services (Name, Price, Features)</option>
@@ -751,8 +1014,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-[11px] font-semibold text-slate-300 mb-1">NVIDIA NIM Model</label>
-                  <select id="crawlAiModel" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
+                  <label class="ethic-label block mb-1">NVIDIA NIM Model</label>
+                  <select id="crawlAiModel" class="w-full px-3 py-1.5 text-xs">
                     <option value="deepseek-ai/deepseek-v4.1-flash" selected>🚀 DeepSeek-v4.1 Flash (Ultra-Fast 2.5s Reasoning)</option>
                     <option value="nvidia/nemotron-3.5-lightning-30b-a3b">⚡ Nemotron 3.5 Lightning (Fast 30B MoE)</option>
                     <option value="moonshotai/kimi-k3">🧠 Moonshot Kimi-k3 (2.8T MoE Deep Reasoning)</option>
@@ -762,54 +1025,54 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-[11px] font-semibold text-slate-300 mb-1">Custom Prompt Instructions (Optional)</label>
+                  <label class="ethic-label block mb-1">Custom Prompt Instructions (Optional)</label>
                   <textarea id="crawlAiPrompt" rows="2" placeholder="e.g. Extract pricing plans, studio features, and highlights..."
-                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"></textarea>
+                            class="w-full px-3 py-1.5 text-xs"></textarea>
                 </div>
               </div>
             </div>
 
             <!-- RPA Automation Playbook (Expandable) -->
-            <details id="crawlRpaDetails" class="group bg-slate-900/50 border border-slate-800 rounded-xl p-3 text-xs">
-              <summary class="flex items-center justify-between cursor-pointer font-medium text-slate-300 hover:text-white gap-2">
+            <details id="crawlRpaDetails" class="group border border-ds rounded-xl p-3 text-xs bg-[#fafafa]">
+              <summary class="flex items-center justify-between cursor-pointer font-medium text-[#1c1b1b] gap-2">
                 <span class="flex items-center gap-2 min-w-0">
-                  <i class="fa-solid fa-robot text-slate-400"></i>
+                  <i class="fa-solid fa-robot text-ds-muted"></i>
                   <span class="truncate">RPA playbook</span>
-                  <span id="crawlRpaCountBadge" class="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 font-mono shrink-0">Auto-modals on</span>
+                  <span id="crawlRpaCountBadge" class="chip-export shrink-0">Auto-modals on</span>
                 </span>
-                <i class="fa-solid fa-chevron-down text-slate-500 group-open:rotate-180 transition-transform shrink-0"></i>
+                <i class="fa-solid fa-chevron-down text-ds-muted group-open:rotate-180 transition-transform shrink-0"></i>
               </summary>
 
-              <div class="mt-3 pt-3 border-t border-slate-800 space-y-3">
+              <div class="mt-3 pt-3 border-t border-ds space-y-3">
                 <div class="space-y-1.5">
-                  <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">Pre-Built Automation Recipes:</label>
-                  <div class="flex flex-col gap-1.5 text-slate-300">
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="crawlRpaDismissCookies" checked class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                  <label class="text-[11px] font-bold text-ds-muted uppercase tracking-wider block">Pre-Built Automation Recipes:</label>
+                  <div class="flex flex-col gap-1.5 text-[#1c1b1b]">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="crawlRpaDismissCookies" checked class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>🛡️ Auto-Dismiss Cookie & Modal Banners (OneTrust, Cookiebot, Popups)</span>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="crawlRpaExpandAccordions" onchange="toggleRpaPreset('crawl', 'expand_accordions', this.checked)" class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="crawlRpaExpandAccordions" onchange="toggleRpaPreset('crawl', 'expand_accordions', this.checked)" class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>📂 Auto-Expand Collapsed Accordions & FAQ disclosures</span>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="crawlRpaToggleAnnual" onchange="toggleRpaPreset('crawl', 'toggle_annual_pricing', this.checked)" class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="crawlRpaToggleAnnual" onchange="toggleRpaPreset('crawl', 'toggle_annual_pricing', this.checked)" class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>💳 Toggle SaaS Annual Pricing discounts</span>
                     </label>
                   </div>
                 </div>
 
                 <!-- AI Natural Language RPA Copilot -->
-                <div class="bg-slate-950/70 p-2.5 rounded-lg border border-purple-500/20 space-y-2">
+                <div class="bg-purple-50/60 p-2.5 rounded-lg border border-purple-200 space-y-2">
                   <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
-                      <i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i> AI RPA Step Generator
+                    <span class="text-[11px] font-bold text-purple-900 flex items-center gap-1.5">
+                      <i class="fa-solid fa-wand-magic-sparkles text-purple-600"></i> AI RPA Step Generator
                     </span>
-                    <span class="text-[11px] text-slate-500 font-mono">DeepSeek V4.1 Flash</span>
+                    <span class="text-[11px] text-purple-700 font-mono">DeepSeek V4.1 Flash</span>
                   </div>
                   <div class="flex gap-1.5">
                     <input id="crawlRpaAiPrompt" type="text" placeholder="e.g. Click 'Specs' tab, scroll down 500px, wait 1s"
-                           class="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-purple-500">
+                           class="flex-1 bg-white border border-purple-200 rounded px-2 py-1 text-[11px] text-[#1c1b1b] focus:outline-none focus:border-purple-500">
                     <button type="button" onclick="generateAiRpaSteps('crawl')" class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-[11px] font-semibold transition flex items-center gap-1 shadow">
                       <i class="fa-solid fa-bolt"></i> Generate
                     </button>
@@ -819,13 +1082,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <!-- Active Step Playbook List -->
                 <div class="space-y-1.5">
                   <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Active Steps Sequence:</span>
-                    <button type="button" onclick="showAddCustomRpaStep('crawl')" class="text-[11px] text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1">
+                    <span class="text-[11px] font-bold text-ds-muted uppercase tracking-wider">Active Steps Sequence:</span>
+                    <button type="button" onclick="showAddCustomRpaStep('crawl')" class="text-[11px] text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1">
                       <i class="fa-solid fa-plus"></i> Add Custom Step
                     </button>
                   </div>
                   <div id="crawlRpaStepsList" class="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    <div class="text-[11px] text-slate-500 italic p-2 bg-slate-950/40 rounded border border-dashed border-slate-800 text-center">
+                    <div class="text-[11px] text-ds-muted italic p-2 bg-white rounded border border-dashed border-ds text-center">
                       No custom steps added. Enable recipes above or generate with AI.
                     </div>
                   </div>
@@ -863,7 +1126,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           <div class="space-y-4">
             <div>
               <label class="ethic-label block mb-1.5">Target Page URL</label>
-              <input id="scrapeUrl" type="url" placeholder="https://example.com" value="https://example.com" class="w-full px-3 py-2 text-sm">
+              <div class="flex gap-2">
+                <input id="scrapeUrl" type="url" placeholder="https://example.com" value="https://example.com" class="w-full px-3 py-2 text-sm">
+                <button type="button" onclick="openElementPicker(document.getElementById('scrapeUrl').value, 'scraper')" class="btn-secondary text-xs px-3 py-2 flex items-center gap-1.5 whitespace-nowrap shrink-0" title="Visually inspect and pick elements">
+                  <i class="fa-solid fa-crosshairs text-purple-600"></i> Pick Element
+                </button>
+              </div>
             </div>
 
             <div>
@@ -919,34 +1187,34 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <i class="fa-solid fa-chevron-down text-ds-muted group-open:rotate-180 transition-transform shrink-0"></i>
               </summary>
 
-              <div class="mt-3 pt-3 border-t border-slate-800 space-y-3">
+              <div class="mt-3 pt-3 border-t border-ds space-y-3">
                 <div class="space-y-1.5">
-                  <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">Pre-Built Automation Recipes:</label>
-                  <div class="flex flex-col gap-1.5 text-slate-300">
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="scrapeRpaDismissCookies" checked class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                  <label class="text-[11px] font-bold text-ds-muted uppercase tracking-wider block">Pre-Built Automation Recipes:</label>
+                  <div class="flex flex-col gap-1.5 text-[#1c1b1b]">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="scrapeRpaDismissCookies" checked class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>🛡️ Auto-Dismiss Cookie & Modal Banners (OneTrust, Cookiebot, Popups)</span>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="scrapeRpaExpandAccordions" checked class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="scrapeRpaExpandAccordions" checked class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>📂 Auto-Expand Collapsed Accordions & FAQ disclosures</span>
                     </label>
-                    <label class="flex items-center gap-2 cursor-pointer hover:text-white">
-                      <input type="checkbox" id="scrapeRpaPricingAnnual" class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
+                    <label class="flex items-center gap-2 cursor-pointer hover:text-ds-primary">
+                      <input type="checkbox" id="scrapeRpaPricingAnnual" class="rounded border-ds text-purple-600 focus:ring-0">
                       <span>🏷️ Toggle SaaS Annual Pricing/discounts</span>
                     </label>
                   </div>
                 </div>
 
                 <!-- AI Copilot Natural Language RPA Step Generator -->
-                <div class="p-2.5 bg-slate-950/70 border border-purple-500/30 rounded-lg space-y-2">
-                  <div class="flex items-center justify-between text-[11px] text-purple-300 font-semibold">
-                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-wand-magic-sparkles text-purple-400"></i> AI RPA Step Generator</span>
-                    <span class="text-[11px] text-slate-400 font-mono">DeepSeek V4.1 Flash</span>
+                <div class="p-2.5 bg-purple-50/60 border border-purple-200 rounded-lg space-y-2">
+                  <div class="flex items-center justify-between text-[11px] text-purple-900 font-semibold">
+                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-wand-magic-sparkles text-purple-600"></i> AI RPA Step Generator</span>
+                    <span class="text-[11px] text-purple-700 font-mono">DeepSeek V4.1 Flash</span>
                   </div>
                   <div class="flex gap-1.5">
                     <input id="scrapeRpaAiPrompt" type="text" placeholder="e.g. Click Specs tab, scroll down 500px, wait for .reviews"
-                           class="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-purple-500"
+                           class="flex-1 bg-white border border-purple-200 rounded px-2.5 py-1 text-[11px] text-[#1c1b1b] focus:outline-none focus:border-purple-500"
                            onkeydown="if(event.key==='Enter') generateRpaFromPrompt('scrape')">
                     <button type="button" onclick="generateRpaFromPrompt('scrape')" class="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] rounded transition flex items-center gap-1 shadow">
                       <i class="fa-solid fa-bolt text-[11px]"></i> Generate
@@ -957,19 +1225,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <!-- Custom Step Builder List -->
                 <div>
                   <div class="flex items-center justify-between mb-1">
-                    <span class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Active Steps Sequence:</span>
-                    <button type="button" onclick="showAddCustomRpaStep('scrape')" class="text-[11px] text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1">
+                    <span class="text-[11px] font-bold text-ds-muted uppercase tracking-wider">Active Steps Sequence:</span>
+                    <button type="button" onclick="showAddCustomRpaStep('scrape')" class="text-[11px] text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1">
                       <i class="fa-solid fa-plus"></i> Add Custom Step
                     </button>
                   </div>
                   <div id="scrapeRpaStepsList" class="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    <div class="text-[11px] text-slate-500 italic p-2 bg-slate-950/40 rounded border border-dashed border-slate-800 text-center">
+                    <div class="text-[11px] text-ds-muted italic p-2 bg-white rounded border border-dashed border-ds text-center">
                       No custom steps added. Enable recipes above or generate with AI.
                     </div>
                   </div>
                 </div>
               </div>
             </details>
+
+            <div class="flex items-center justify-between p-2.5 rounded-xl border border-ds bg-[#fafafa] text-xs">
+              <label class="flex items-center gap-2 cursor-pointer font-medium text-[#1c1b1b]">
+                <input type="checkbox" id="scrapeCaptureScreenshot" class="rounded border-ds text-purple-600 focus:ring-0">
+                <span>🖼️ Capture Full-Page Screenshot (Playwright)</span>
+              </label>
+              <span class="text-[10px] text-ds-muted font-mono">Archived to disk</span>
+            </div>
 
             <div class="pt-2">
               <button id="btnScrape" onclick="startScrape()" class="cta-primary w-full py-2.5 flex items-center justify-center gap-2">
@@ -1121,7 +1397,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button onclick="openDossierModal()" class="cta-primary px-4 py-2 text-xs flex items-center gap-2">
-              <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Market Dossier
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Website Report
             </button>
             <button onclick="loadHistory()" class="btn-ghost px-3.5 py-2 rounded-lg flex items-center gap-1.5 active:scale-95">
               <i class="fa-solid fa-arrows-rotate"></i> Refresh
@@ -1246,7 +1522,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               </div>
             </div>
             <div id="askContent" class="hidden space-y-3">
-              <div id="askAnswerText" class="text-[#1c1b1b] leading-relaxed whitespace-pre-wrap"></div>
+              <div id="askCacheBadge" class="hidden text-[11px] font-mono text-ds-success"></div>
+              <div id="askAnswerText" class="ask-answer text-[#1c1b1b] leading-relaxed text-sm"></div>
               <div class="pt-3 border-t border-ds">
                 <div class="ethic-label mb-2">Sources Cited:</div>
                 <div id="askSourcesList" class="flex flex-wrap gap-2"></div>
@@ -1318,82 +1595,130 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </main>
 
     <!-- GLOBAL PREVIEW MODAL -->
-    <div id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 modal-overlay">
-      <div class="glass-card border border-slate-700/80 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden modal-card">
-        <!-- Modal Header -->
-        <div class="flex justify-between items-center px-5 py-4 border-b border-slate-800/80 bg-slate-950/70">
-          <div class="flex items-center gap-2.5 max-w-xs sm:max-w-sm md:max-w-md min-w-0">
-            <div class="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 shrink-0">
-              <i class="fa-solid fa-file-lines text-xs"></i>
+    <div id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay-bg backdrop-blur-sm" onclick="if(event.target===this) closePreview()">
+      <div id="previewModalDialog" class="dossier-modal-card w-full max-w-5xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden modal-card transition-all duration-200">
+        <!-- MODAL HEADER: TWO-TIER DESIGN -->
+        <div class="flex flex-col gap-2.5 px-5 py-3.5 border-b border-ds bg-white">
+          <!-- Tier 1: Title, URL, Badges, Fullscreen, Close -->
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-9 h-9 rounded-xl bg-ds-surface-low border border-ds flex items-center justify-center text-ds-accent shrink-0">
+                <i class="fa-solid fa-file-lines text-base"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <h4 id="previewTitle" class="text-sm sm:text-base font-bold text-[#1c1b1b] truncate font-heading">Page Content</h4>
+                  <span id="previewStatusBadge" class="status-pill ok shrink-0 text-[10px]">200 OK</span>
+                  <span id="previewEngineBadge" class="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-ds-surface-low text-ds-muted border border-ds shrink-0">FAST</span>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <a id="previewUrl" href="#" target="_blank" rel="noopener noreferrer" class="text-xs text-ds-secondary hover:underline truncate inline-flex items-center gap-1">
+                    <span id="previewUrlText" class="truncate">https://...</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px] shrink-0"></i>
+                  </a>
+                </div>
+              </div>
             </div>
-            <h4 id="previewTitle" class="text-sm font-bold text-slate-100 truncate">Page Content</h4>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button type="button" id="previewFullscreenBtn" onclick="togglePreviewFullscreen()" class="btn-icon" aria-label="Toggle Fullscreen" title="Toggle Fullscreen">
+                <i id="previewFullscreenIcon" class="fa-solid fa-expand text-xs"></i>
+              </button>
+              <button type="button" onclick="closePreview()" class="btn-icon" aria-label="Close modal" title="Close">
+                <i class="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
           </div>
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap py-1 pr-1 scrollbar-none max-w-xs sm:max-w-md md:max-w-xl">
-              <button id="viewMdTab" onclick="setPreviewTab('markdown')" class="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-teal-500/20 border border-teal-400/40 active:scale-95">
-                <i class="fa-brands fa-markdown"></i> Markdown
-              </button>
-              <button id="viewAiTab" onclick="setPreviewTab('ai')" class="px-3 py-1.5 glass-card-subtle text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700/60 active:scale-95">
-                <i class="fa-solid fa-brain text-teal-400"></i> AI Extraction
-              </button>
-              <button id="viewRpaTab" onclick="setPreviewTab('rpa')" class="px-3 py-1.5 glass-card-subtle text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700/60 active:scale-95">
-                <i class="fa-solid fa-robot text-purple-400"></i> RPA Logs
-              </button>
-              <button id="viewNetworkTab" onclick="setPreviewTab('network')" class="px-3 py-1.5 glass-card-subtle text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700/60 active:scale-95">
-                <i class="fa-solid fa-network-wired text-cyan-400"></i> Network APIs <span id="previewNetworkCountBadge" class="ml-1 px-1.5 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-700/50 rounded-full text-[11px] font-mono">0</span>
-              </button>
-              <button id="viewElementsTab" onclick="setPreviewTab('elements')" class="px-3 py-1.5 glass-card-subtle text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border border-slate-700/60 active:scale-95">
-                <i class="fa-solid fa-code text-amber-400"></i> DOM Elements <span id="previewElementsCountBadge" class="ml-1 px-1.5 py-0.5 bg-amber-950 text-amber-300 border border-amber-700/50 rounded-full text-[11px] font-mono">0</span>
-              </button>
-            </div>
-            <button onclick="closePreview()" class="text-slate-400 hover:text-white w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg hover:bg-slate-800/80 flex items-center justify-center transition shrink-0 ml-1" aria-label="Close modal">
-              <i class="fa-solid fa-xmark text-sm"></i>
+          <!-- Tier 2: Pill Tabs with Icons and Count Badges -->
+          <div class="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap pt-0.5">
+            <button id="viewMdTab" onclick="setPreviewTab('markdown')" class="preview-tab preview-tab-on">
+              <i class="fa-regular fa-file-lines"></i>
+              <span>Reader View</span>
+            </button>
+            <button id="viewAiTab" onclick="setPreviewTab('ai')" class="preview-tab">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>AI Extraction</span>
+            </button>
+            <button id="viewScreenshotTab" onclick="setPreviewTab('screenshot')" class="preview-tab">
+              <i class="fa-solid fa-image text-purple-600"></i>
+              <span>Screenshot & Vision</span>
+              <span id="previewScreenshotBadge" class="hidden ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-100 text-purple-800 font-mono font-bold border border-purple-200">IMG</span>
+            </button>
+            <button id="viewRpaTab" onclick="setPreviewTab('rpa')" class="preview-tab">
+              <i class="fa-solid fa-robot"></i>
+              <span>RPA Logs</span>
+            </button>
+            <button id="viewNetworkTab" onclick="setPreviewTab('network')" class="preview-tab">
+              <i class="fa-solid fa-network-wired"></i>
+              <span>Network</span>
+              <span id="previewNetworkCountBadge" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-ds-surface-low text-ds-muted font-mono font-bold border border-ds">0</span>
+            </button>
+            <button id="viewElementsTab" onclick="setPreviewTab('elements')" class="preview-tab">
+              <i class="fa-solid fa-code"></i>
+              <span>DOM Elements</span>
+              <span id="previewElementsCountBadge" class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-ds-surface-low text-ds-muted font-mono font-bold border border-ds">0</span>
             </button>
           </div>
         </div>
 
-        <!-- Modal Body -->
-        <div class="p-5 overflow-y-auto flex-1 space-y-4">
-          <!-- Markdown View Section -->
+        <!-- MODAL BODY -->
+        <div class="p-5 overflow-y-auto flex-1 space-y-4 bg-ds-surface-low/30">
+          <!-- Markdown / Reader Section -->
           <div id="previewMdSection">
-            <div class="flex justify-between items-center mb-2 text-xs text-slate-400">
-              <span id="previewMdStats">Cleaned Markdown View</span>
-              <button onclick="copyPreviewMarkdown()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-teal-300 rounded text-xs transition">
-                <i class="fa-regular fa-copy mr-1"></i> Copy Markdown
-              </button>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 text-xs bg-white p-3 rounded-xl border border-ds shadow-sm">
+              <div class="flex items-center gap-3 text-ds-muted font-mono text-[11px]" id="previewMdStats">
+                <span class="inline-flex items-center gap-1.5 text-ds-primary font-semibold">
+                  <i class="fa-regular fa-clock"></i>
+                  <span id="previewReadTime">1 min read</span>
+                </span>
+                <span>•</span>
+                <span id="previewWordCount">0 words</span>
+                <span>•</span>
+                <span id="previewCharCount">0 characters</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="previewSourceToggle" onclick="togglePreviewSource()" class="btn-ghost px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5">
+                  <i id="previewSourceToggleIcon" class="fa-solid fa-code text-[11px]"></i>
+                  <span id="previewSourceToggleText">Raw Source</span>
+                </button>
+                <button type="button" onclick="copyPreviewMarkdown()" class="btn-ghost px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5">
+                  <i class="fa-regular fa-copy text-[11px]"></i>
+                  <span>Copy Markdown</span>
+                </button>
+              </div>
             </div>
-            <pre id="previewContent" class="bg-slate-950 p-4 rounded-xl text-xs font-mono text-slate-200 overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-800"></pre>
+            <div id="previewReading" class="preview-reading bg-white p-6 rounded-xl border border-ds shadow-sm"></div>
+            <pre id="previewContent" class="hidden bg-[#0f172a] p-5 rounded-xl text-xs font-mono text-[#f8fafc] overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-700/80 shadow-inner"></pre>
           </div>
 
           <!-- AI Extraction Section -->
-          <div id="previewAiSection" class="hidden">
+          <div id="previewAiSection" class="hidden space-y-3">
             <!-- If AI structured data already exists -->
             <div id="previewAiDataContainer" class="hidden space-y-3">
-              <div class="flex justify-between items-center pb-2 border-b border-slate-800">
-                <span class="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                  <i class="fa-solid fa-circle-check"></i> Extracted via NVIDIA NIM (Llama 3.2 Vision)
+              <div class="flex justify-between items-center pb-2 border-b border-ds">
+                <span class="text-xs text-ds-accent font-semibold flex items-center gap-1.5">
+                  <i class="fa-solid fa-circle-check text-emerald-600"></i> Extracted via NVIDIA NIM
                 </span>
                 <div class="flex items-center gap-2">
-                  <button onclick="copyPreviewAiJson()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-teal-300 rounded text-xs transition">
-                    <i class="fa-regular fa-copy mr-1"></i> Copy JSON
+                  <button type="button" onclick="copyPreviewAiJson()" class="btn-ghost px-2.5 py-1 rounded text-xs flex items-center gap-1">
+                    <i class="fa-regular fa-copy"></i> Copy JSON
                   </button>
-                  <button onclick="showModalAiTrigger()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition">
-                    <i class="fa-solid fa-arrows-rotate mr-1"></i> Re-Extract
+                  <button type="button" onclick="showModalAiTrigger()" class="btn-ghost px-2.5 py-1 rounded text-xs flex items-center gap-1">
+                    <i class="fa-solid fa-arrows-rotate"></i> Re-Extract
                   </button>
                 </div>
               </div>
-              <pre id="previewAiJson" class="bg-slate-950 p-4 rounded-xl text-xs font-mono text-emerald-300 overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-800"></pre>
+              <pre id="previewAiJson" class="bg-[#0f172a] p-4 rounded-xl text-xs font-mono text-[#34d399] overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-700/80 shadow-inner"></pre>
             </div>
 
             <!-- If AI structured data doesn't exist yet or user wants to re-extract -->
-            <div id="previewAiTriggerContainer" class="p-5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-4">
+            <div id="previewAiTriggerContainer" class="p-5 bg-white rounded-xl border border-ds space-y-4 shadow-sm">
               <div class="flex items-start gap-3">
-                <div class="w-9 h-9 rounded-lg bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 flex-shrink-0 mt-0.5">
+                <div class="w-9 h-9 rounded-lg bg-ds-surface-low border border-ds flex items-center justify-center text-ds-accent flex-shrink-0 mt-0.5">
                   <i class="fa-solid fa-wand-magic-sparkles"></i>
                 </div>
                 <div>
-                  <h4 class="text-sm font-semibold text-slate-200">Extract Structured Data with AI</h4>
-                  <p class="text-xs text-slate-400 mt-0.5">
+                  <h4 class="text-sm font-semibold text-[#1c1b1b]">Extract Structured Data with AI</h4>
+                  <p class="text-xs text-ds-muted mt-0.5">
                     This page has not been processed through the AI Extractor yet. Choose a schema below to extract clean JSON with NVIDIA NIM instantly.
                   </p>
                 </div>
@@ -1401,8 +1726,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
                 <div>
-                  <label class="block text-xs font-semibold text-slate-300 mb-1">Target Schema</label>
-                  <select id="modalAiSchema" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                  <label class="block text-xs font-semibold text-ds-muted mb-1">Target Schema</label>
+                  <select id="modalAiSchema" class="w-full">
                     <option value="company_profile">🏢 Company & Product Intelligence (What they do, Offerings, Market Purpose)</option>
                     <option value="article">Article / Blog Post (Title, Summary, Key Points)</option>
                     <option value="product">Product / Pricing / Services (Name, Price, Features)</option>
@@ -1411,8 +1736,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-slate-300 mb-1">NVIDIA NIM Model</label>
-                  <select id="modalAiModel" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                  <label class="block text-xs font-semibold text-ds-muted mb-1">NVIDIA NIM Model</label>
+                  <select id="modalAiModel" class="w-full">
                     <option value="deepseek-ai/deepseek-v4.1-flash" selected>🚀 DeepSeek V4.1 Flash (Ultra-Fast 15s - Recommended)</option>
                     <option value="meta/llama-3.2-11b-vision-instruct">⚖️ Llama 3.2 11B Vision (Balanced Fallback)</option>
                     <option value="nvidia/nemotron-3.5-lightning-30b-a3b">⚡ Nemotron 3.5 Lightning (Ultra-Fast MoE)</option>
@@ -1422,56 +1747,56 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                   </select>
                 </div>
                 <div>
-                  <label class="block text-xs font-semibold text-slate-300 mb-1">Custom Prompt Instructions (Optional)</label>
+                  <label class="block text-xs font-semibold text-ds-muted mb-1">Custom Prompt Instructions (Optional)</label>
                   <input id="modalAiPrompt" type="text" placeholder="e.g. Extract pricing plans, studio features, stats"
-                         class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                         class="w-full">
                 </div>
               </div>
 
               <div class="pt-2 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-3">
-                  <span class="text-[11px] text-slate-400">Uses NVIDIA NIM API with automated ChromaDB caching</span>
-                  <div id="modalAiTimerBadge" class="hidden items-center gap-2 px-2.5 py-1 rounded-full bg-slate-900 border border-teal-500/40 text-[11px] font-mono text-teal-300 shadow-inner">
-                    <span><i class="fa-regular fa-clock mr-1 text-slate-400"></i>Started: <span id="modalAiStartTime" class="text-slate-200">--:--:--</span></span>
-                    <span class="text-teal-600">|</span>
-                    <span><i class="fa-solid fa-stopwatch mr-1 text-teal-400"></i>Elapsed: <span id="modalAiElapsedTime" class="font-bold text-teal-300">00:00</span></span>
+                  <span class="text-[11px] text-ds-muted">Uses NVIDIA NIM API with automated ChromaDB caching</span>
+                  <div id="modalAiTimerBadge" class="hidden items-center gap-2 px-2.5 py-1 rounded-full bg-ds-surface-low border border-ds text-[11px] font-mono text-ds-accent shadow-xs">
+                    <span><i class="fa-regular fa-clock mr-1 text-ds-muted"></i>Started: <span id="modalAiStartTime" class="text-[#1c1b1b] font-medium">--:--:--</span></span>
+                    <span class="text-ds-outline">|</span>
+                    <span><i class="fa-solid fa-stopwatch mr-1 text-ds-primary"></i>Elapsed: <span id="modalAiElapsedTime" class="font-bold text-ds-primary">00:00</span></span>
                   </div>
                 </div>
-                <button id="btnModalExtractAi" onclick="runModalAiExtraction()" class="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-semibold text-xs rounded-lg transition shadow flex items-center gap-1.5">
-                  <i class="fa-solid fa-bolt"></i> ⚡ Extract with AI Now
+                <button id="btnModalExtractAi" onclick="runModalAiExtraction()" class="cta-primary px-4 py-2 text-xs flex items-center gap-1.5">
+                  <i class="fa-solid fa-bolt"></i> <span>⚡ Extract with AI Now</span>
                 </button>
               </div>
 
-              <div id="modalAiError" class="hidden p-3 bg-red-950/50 border border-red-800 rounded-lg text-xs text-red-300"></div>
+              <div id="modalAiError" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700"></div>
             </div>
           </div>
 
           <!-- RPA Execution Logs Section -->
           <div id="previewRpaSection" class="hidden space-y-3">
-            <div class="flex justify-between items-center pb-2 border-b border-slate-800">
-              <span class="text-xs text-purple-300 font-semibold flex items-center gap-1.5">
+            <div class="flex justify-between items-center pb-2 border-b border-ds">
+              <span class="text-xs text-purple-700 font-semibold flex items-center gap-1.5">
                 <i class="fa-solid fa-robot"></i> Browser Automation Execution Trace
               </span>
-              <span id="previewRpaCountBadge" class="text-[11px] font-mono text-slate-400">0 actions logged</span>
+              <span id="previewRpaCountBadge" class="text-[11px] font-mono text-ds-muted">0 actions logged</span>
             </div>
-            <div id="previewRpaLogsList" class="bg-slate-950 p-4 rounded-xl text-xs font-mono text-slate-300 space-y-2 border border-slate-800 max-h-96 overflow-y-auto">
-              <div class="text-slate-500 italic p-3 text-center">No interactive RPA actions logged for this page.</div>
+            <div id="previewRpaLogsList" class="bg-white p-4 rounded-xl text-xs font-mono text-[#1c1b1b] space-y-2 border border-ds max-h-96 overflow-y-auto shadow-sm">
+              <div class="text-ds-muted italic p-3 text-center">No interactive RPA actions logged for this page.</div>
             </div>
           </div>
 
           <!-- Network APIs Section -->
           <div id="previewNetworkSection" class="hidden space-y-3">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-ds">
               <div class="flex items-center gap-2">
-                <span class="text-xs text-cyan-300 font-semibold flex items-center gap-1.5">
+                <span class="text-xs text-ds-secondary font-semibold flex items-center gap-1.5">
                   <i class="fa-solid fa-network-wired"></i> Intercepted Network API Calls
                 </span>
-                <span id="previewNetworkSummaryBadge" class="text-[11px] font-mono text-slate-400">0 calls captured</span>
+                <span id="previewNetworkSummaryBadge" class="text-[11px] font-mono text-ds-muted">0 calls captured</span>
               </div>
               <div class="flex items-center gap-2">
                 <input id="networkSearchInput" type="text" oninput="filterPreviewNetwork()" placeholder="Filter by endpoint URL / keyword..."
-                       class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-slate-200 placeholder-slate-500 w-48 sm:w-64 focus:outline-none focus:border-cyan-500">
-                <select id="networkStatusFilter" onchange="filterPreviewNetwork()" class="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-cyan-500">
+                       class="w-48 sm:w-64 text-xs">
+                <select id="networkStatusFilter" onchange="filterPreviewNetwork()" class="text-xs">
                   <option value="all">All Status</option>
                   <option value="2xx">2xx (OK)</option>
                   <option value="error">4xx / 5xx</option>
@@ -1479,34 +1804,34 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               </div>
             </div>
             <div id="previewNetworkList" class="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-              <div class="text-slate-500 italic p-6 text-center bg-slate-950/60 rounded-xl border border-slate-800">
+              <div class="text-ds-muted italic p-6 text-center bg-white rounded-xl border border-ds shadow-sm">
                 No background Fetch/XHR API calls recorded for this page.<br>
-                <span class="text-[11px] text-slate-600 mt-1 block">(Tip: Use Browser Engine with JavaScript enabled to intercept background API traffic)</span>
+                <span class="text-[11px] text-ds-muted mt-1 block">(Tip: Use Browser Engine with JavaScript enabled to intercept background API traffic)</span>
               </div>
             </div>
           </div>
 
           <!-- DOM Elements Section -->
           <div id="previewElementsSection" class="hidden space-y-4">
-            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-              <span class="text-xs text-amber-300 font-semibold flex items-center gap-1.5">
+            <div class="flex items-center justify-between pb-2 border-b border-ds">
+              <span class="text-xs text-amber-700 font-semibold flex items-center gap-1.5">
                 <i class="fa-solid fa-code"></i> DOM Elements Inspector & Selector Tester
               </span>
-              <span id="previewElementsSummaryBadge" class="text-[11px] font-mono text-slate-400">0 elements</span>
+              <span id="previewElementsSummaryBadge" class="text-[11px] font-mono text-ds-muted">0 elements</span>
             </div>
 
             <!-- Live Selector Tester Box -->
-            <div class="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800 space-y-3">
+            <div class="p-4 bg-white rounded-xl border border-ds space-y-3 shadow-sm">
               <div class="flex items-center justify-between">
-                <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                  <i class="fa-solid fa-crosshairs text-amber-400"></i> Test Live CSS Selector Against Page DOM
+                <label class="text-xs font-semibold text-[#1c1b1b] flex items-center gap-1.5">
+                  <i class="fa-solid fa-crosshairs text-amber-600"></i> Test Live CSS Selector Against Page DOM
                 </label>
-                <span class="text-[11px] text-slate-400">Instant validation & attributes preview</span>
+                <span class="text-[11px] text-ds-muted">Instant validation & attributes preview</span>
               </div>
               <div class="flex gap-2">
                 <input id="elementSelectorInput" type="text" placeholder="e.g. button.pricing-tier, input[name='search'], h2, table, .navbar-brand"
-                       class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-amber-300 placeholder-slate-500 focus:outline-none focus:border-amber-500">
-                <button onclick="runPreviewElementCheck()" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold text-xs rounded-lg transition flex items-center gap-1.5 shadow">
+                       class="flex-1 font-mono text-xs">
+                <button type="button" onclick="runPreviewElementCheck()" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-semibold text-xs rounded-lg transition flex items-center gap-1.5 shadow">
                   <i class="fa-solid fa-magnifying-glass"></i> Check Element
                 </button>
               </div>
@@ -1515,17 +1840,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             <!-- Elements Inventory Categorized Tabs -->
             <div class="space-y-2">
-              <div class="flex items-center gap-2 border-b border-slate-800 text-xs">
-                <button id="elemCatBtnButtons" onclick="setElementCategory('buttons')" class="px-3 py-1.5 border-b-2 border-amber-500 text-amber-300 font-semibold flex items-center gap-1.5">
+              <div class="flex items-center gap-2 border-b border-ds text-xs">
+                <button id="elemCatBtnButtons" onclick="setElementCategory('buttons')" class="px-3 py-1.5 border-b-2 border-amber-600 text-amber-700 font-semibold flex items-center gap-1.5">
                   <i class="fa-solid fa-hand-pointer"></i> Buttons (<span id="elemCountButtons">0</span>)
                 </button>
-                <button id="elemCatBtnInputs" onclick="setElementCategory('inputs')" class="px-3 py-1.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold flex items-center gap-1.5">
+                <button id="elemCatBtnInputs" onclick="setElementCategory('inputs')" class="px-3 py-1.5 border-b-2 border-transparent text-ds-muted hover:text-[#1c1b1b] font-semibold flex items-center gap-1.5">
                   <i class="fa-regular fa-keyboard"></i> Forms & Inputs (<span id="elemCountInputs">0</span>)
                 </button>
-                <button id="elemCatBtnTables" onclick="setElementCategory('tables')" class="px-3 py-1.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold flex items-center gap-1.5">
+                <button id="elemCatBtnTables" onclick="setElementCategory('tables')" class="px-3 py-1.5 border-b-2 border-transparent text-ds-muted hover:text-[#1c1b1b] font-semibold flex items-center gap-1.5">
                   <i class="fa-solid fa-table"></i> Tables (<span id="elemCountTables">0</span>)
                 </button>
-                <button id="elemCatBtnHeadings" onclick="setElementCategory('headings')" class="px-3 py-1.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold flex items-center gap-1.5">
+                <button id="elemCatBtnHeadings" onclick="setElementCategory('headings')" class="px-3 py-1.5 border-b-2 border-transparent text-ds-muted hover:text-[#1c1b1b] font-semibold flex items-center gap-1.5">
                   <i class="fa-solid fa-heading"></i> Headings (<span id="elemCountHeadings">0</span>)
                 </button>
               </div>
@@ -1537,108 +1862,162 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               <div id="elemCatListHeadings" class="hidden space-y-1.5 max-h-72 overflow-y-auto"></div>
             </div>
           </div>
+
+          <!-- Screenshot & Vision Section -->
+          <div id="previewScreenshotSection" class="hidden space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-white rounded-xl border border-ds shadow-xs">
+              <div>
+                <h5 class="text-xs font-bold text-slate-900 font-mono flex items-center gap-2">
+                  <i class="fa-solid fa-camera text-purple-600"></i> Full-Page Screenshot Archive & Vision AI
+                </h5>
+                <p class="text-[11px] text-ds-muted mt-0.5">High-fidelity Chromium viewport snapshot captured during crawl.</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="openFullScreenshotBtn" onclick="openScreenshotInNewTab()" class="btn-ghost px-3 py-1.5 text-xs flex items-center gap-1.5 text-slate-700">
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i> Open Full Image
+                </button>
+              </div>
+            </div>
+
+            <!-- Vision Extraction Control Box -->
+            <div class="p-4 rounded-xl border border-purple-200 bg-purple-50/50 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-purple-600"></span>
+                  <span class="text-xs font-bold text-purple-900 font-mono">Vision AI Multimodal Extraction</span>
+                </div>
+                <span class="text-[10px] text-purple-700 font-mono">Llama 3.2 11B Vision / NIM</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                <div class="sm:col-span-8">
+                  <select id="visionTaskSelect" class="w-full px-3 py-2 text-xs border border-purple-200 rounded-lg bg-white">
+                    <option value="chart_to_table">Transcribe Charts & Graphs to Markdown Tables</option>
+                    <option value="visual_pricing_matrix">Extract Visual Pricing Tiers & Feature Matrix</option>
+                    <option value="visual_summary">Executive Visual Hierarchy & Layout Summary</option>
+                  </select>
+                </div>
+                <div class="sm:col-span-4">
+                  <button type="button" id="runVisionBtn" onclick="runPreviewVisionExtract()" class="w-full py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-lg transition flex items-center justify-center gap-1.5 shadow-xs">
+                    <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i> Extract with Vision AI
+                  </button>
+                </div>
+              </div>
+              <div id="visionResultCard" class="hidden p-3 bg-white rounded-lg border border-purple-200 text-xs font-mono whitespace-pre-wrap max-h-60 overflow-y-auto"></div>
+            </div>
+
+            <!-- Screenshot Display Frame -->
+            <div id="screenshotFrameWrap" class="rounded-xl border border-ds overflow-hidden bg-slate-900 shadow-md text-center">
+              <div id="screenshotEmptyNotice" class="p-12 text-slate-400 text-xs font-mono">
+                <i class="fa-solid fa-image text-3xl mb-2 block opacity-40"></i>
+                No screenshot was captured for this page run.<br>
+                <span class="text-slate-500 text-[11px]">Enable "Capture Full-Page Screenshot" in the Scraper or run with Browser strategy to archive visual snapshots.</span>
+              </div>
+              <img id="screenshotImg" src="" alt="Full-Page Page Screenshot" class="hidden w-full h-auto max-h-[600px] object-top object-contain mx-auto">
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- MARKET INTELLIGENCE DOSSIER MODAL -->
-    <div id="dossierModal" role="dialog" aria-modal="true" aria-labelledby="dossierTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 modal-overlay">
-      <div class="glass-card border border-purple-500/40 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden modal-card">
-        <!-- Modal Header -->
-        <div class="flex justify-between items-center px-5 py-4 border-b border-slate-800 bg-gradient-to-r from-purple-950/80 via-slate-900 to-slate-950">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-inner">
-              <i class="fa-solid fa-chart-line text-lg"></i>
+    <!-- WEBSITE INTELLIGENCE DOSSIER MODAL -->
+    <div id="dossierModal" role="dialog" aria-modal="true" aria-labelledby="dossierTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay-bg backdrop-blur-sm">
+      <div class="dossier-modal-card w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden modal-card">
+        <div class="flex justify-between items-start gap-3 px-5 py-4 border-b border-ds">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-ds-surface-low border border-ds flex items-center justify-center text-ds-success shrink-0">
+              <i class="fa-solid fa-file-lines text-lg"></i>
             </div>
-            <div>
-              <h3 id="dossierTitle" class="text-base font-bold text-white flex items-center gap-2">
-                Multi-Competitor Market Intelligence Dossier
-                <span class="px-2 py-0.5 rounded-full text-[11px] font-mono bg-purple-900/80 text-purple-300 border border-purple-500/40">Kimi-k3 / Nemotron</span>
-              </h3>
-              <p class="text-slate-400 text-xs mt-0.5">Synthesize executive landscape analysis, competitive positioning matrices, and product benchmarks across stored websites.</p>
+            <div class="min-w-0">
+              <h3 id="dossierTitle" class="text-base font-bold text-[#1c1b1b]">Website Intelligence Report</h3>
+              <p id="dossierSubtitle" class="text-ds-muted text-xs mt-0.5">Generate a structured report from your crawled pages in ChromaDB.</p>
             </div>
           </div>
-          <button onclick="closeDossierModal()" class="text-slate-400 hover:text-white w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg hover:bg-slate-800 flex items-center justify-center transition shrink-0" aria-label="Close">
+          <button onclick="closeDossierModal()" class="btn-icon shrink-0" aria-label="Close">
             <i class="fa-solid fa-xmark text-sm"></i>
           </button>
         </div>
 
-        <!-- Modal Body -->
-        <div class="p-6 overflow-y-auto flex-1 space-y-5 text-xs">
-          <!-- Config Controls -->
-          <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-4">
+        <div class="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+          <div class="p-4 rounded-xl border border-ds bg-[#fafafa] space-y-4">
             <div>
-              <label class="block font-semibold text-slate-300 mb-2">Select Target Domains for Cross-Analysis:</label>
-              <div id="dossierDomainCheckboxes" class="flex flex-wrap gap-2.5 max-h-36 overflow-y-auto p-2.5 bg-slate-900/90 rounded-lg border border-slate-800">
-                <span class="text-slate-500 text-xs italic">Loading tracked domains...</span>
+              <label class="ethic-label block mb-1.5" for="dossierReportType">What do you want in this dossier?</label>
+              <select id="dossierReportType" onchange="syncDossierTypeUI()" class="w-full px-3 py-2 text-sm font-medium">
+                <option value="complete_site_report" selected>Complete website report — full picture of the site</option>
+                <option value="highlights_best">Best things on this site — strengths & standout content</option>
+                <option value="market_research">Market research brief — category, audience & positioning</option>
+                <option value="technical_audit">Content & structure audit — IA, clarity & gaps</option>
+                <option value="competitive_matrix">Competitive comparison — multi-domain matrix</option>
+              </select>
+              <p id="dossierTypeHint" class="text-ds-muted text-[11px] mt-1.5 leading-snug"></p>
+            </div>
+
+            <div>
+              <label class="ethic-label block mb-1.5">Target domain(s)</label>
+              <div id="dossierDomainCheckboxes" class="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 rounded-lg border border-ds bg-white">
+                <span class="text-ds-muted text-xs italic">Loading tracked domains...</span>
               </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block font-semibold text-slate-300 mb-1">Reasoning Synthesis Model:</label>
-                <select id="dossierAiModel" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 transition-all">
-                  <option value="deepseek-ai/deepseek-v4.1-flash" selected>🚀 DeepSeek V4.1 Flash (Ultra-Fast 15s Synthesis - Recommended)</option>
-                  <option value="meta/llama-3.2-11b-vision-instruct">⚖️ Llama 3.2 11B Vision (Fast Stable Fallback)</option>
-                  <option value="nvidia/nemotron-3.5-lightning-30b-a3b">⚡ Nemotron 3.5 Lightning (Fast Structured Reasoning)</option>
-                  <option value="z-ai/glm-5.3-flash">🎨 GLM-5.3 Flash (Ultra-Fast Analytical Breakdown)</option>
-                  <option value="moonshotai/kimi-k3">🧠 Moonshot Kimi-k3 (Deep Long-Context Reasoning)</option>
-                  <option value="nvidia/nemotron-parse-2.0">👁️ Nemotron Parse 2.0 (Document & Structural Parsing)</option>
+                <label class="ethic-label block mb-1.5" for="dossierAiModel">Synthesis model</label>
+                <select id="dossierAiModel" class="w-full px-3 py-2 text-xs">
+                  <option value="deepseek-ai/deepseek-v4.1-flash" selected>DeepSeek V4.1 Flash (recommended)</option>
+                  <option value="meta/llama-3.2-11b-vision-instruct">Llama 3.2 11B Vision</option>
+                  <option value="nvidia/nemotron-3.5-lightning-30b-a3b">Nemotron 3.5 Lightning</option>
+                  <option value="z-ai/glm-5.3-flash">GLM-5.3 Flash</option>
+                  <option value="moonshotai/kimi-k3">Moonshot Kimi-k3</option>
+                  <option value="nvidia/nemotron-parse-2.0">Nemotron Parse 2.0</option>
                 </select>
               </div>
-
               <div>
-                <label class="block font-semibold text-slate-300 mb-1">Custom Strategic Focus (Optional):</label>
-                <input id="dossierCustomFocus" type="text" placeholder="e.g. Focus on pricing models, enterprise features, & USP"
-                       class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 transition-all">
+                <label class="ethic-label block mb-1.5" for="dossierCustomFocus">Extra focus (optional)</label>
+                <input id="dossierCustomFocus" type="text" placeholder="e.g. pricing, enterprise features, onboarding"
+                       class="w-full px-3 py-2 text-xs">
               </div>
             </div>
 
-            <div class="flex items-center justify-between pt-2">
-              <span id="dossierSelectedCount" class="text-slate-400 text-xs font-mono">0 domains selected</span>
-              <button id="btnGenerateDossier" onclick="runDossierGeneration()" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2 active:scale-95 border border-purple-400/30">
-                <i class="fa-solid fa-brain"></i> Generate Competitive Dossier
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <span id="dossierSelectedCount" class="text-ds-muted text-xs font-mono">0 domain(s) selected</span>
+              <button id="btnGenerateDossier" onclick="runDossierGeneration()" class="cta-primary px-5 py-2.5 text-xs flex items-center gap-2">
+                <i class="fa-solid fa-brain"></i> <span id="btnGenerateDossierLabel">Generate report</span>
               </button>
             </div>
           </div>
 
-          <!-- Dossier Error Banner -->
-          <div id="dossierError" class="hidden p-3 bg-red-950/60 border border-red-500/50 rounded-xl text-red-300 text-xs"></div>
+          <div id="dossierError" class="hidden p-3 bg-[#ffdad6] border border-[#ba1a1a]/30 rounded-xl text-[#ba1a1a] text-xs"></div>
 
-          <!-- Dossier Loading -->
-          <div id="dossierLoading" class="hidden p-8 text-center space-y-3 bg-slate-950/40 rounded-xl border border-purple-500/20">
-            <div class="inline-block w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-            <div class="text-purple-300 font-semibold text-sm">Synthesizing Cross-Domain Intelligence...</div>
-            <p class="text-slate-400 text-xs max-w-md mx-auto">Extracting domain knowledge, building comparative feature matrices, and querying <span id="dossierModelDisplay" class="font-mono text-purple-400 font-bold">DeepSeek V4.1 Flash</span>.</p>
-            <div class="inline-flex items-center gap-3 px-3.5 py-1.5 bg-slate-900/90 border border-purple-500/30 rounded-full text-xs font-mono text-purple-300 shadow-inner">
-              <span><i class="fa-regular fa-clock mr-1 text-slate-400"></i>Started: <span id="dossierStartTime" class="text-slate-200">--:--:--</span></span>
-              <span class="text-purple-500">|</span>
-              <span><i class="fa-solid fa-stopwatch mr-1 text-purple-400"></i>Elapsed: <span id="dossierElapsedTime" class="text-purple-300 font-bold">00:00</span></span>
+          <div id="dossierLoading" class="hidden p-8 text-center space-y-3 rounded-xl border border-ds bg-ds-surface-low">
+            <div class="inline-block w-8 h-8 border-2 border-ds-accent border-t-transparent rounded-full animate-spin"></div>
+            <div class="text-ds-accent font-semibold text-sm">Synthesizing report from crawled knowledge…</div>
+            <p class="text-ds-muted text-xs max-w-md mx-auto">Using <span id="dossierModelDisplay" class="font-mono text-ds-success font-bold">DeepSeek V4.1 Flash</span></p>
+            <div class="inline-flex items-center gap-3 px-3.5 py-1.5 bg-white border border-ds rounded-full text-xs font-mono text-ds-muted">
+              <span>Started: <span id="dossierStartTime" class="text-[#1c1b1b]">--:--:--</span></span>
+              <span>|</span>
+              <span>Elapsed: <span id="dossierElapsedTime" class="text-ds-accent font-bold">00:00</span></span>
             </div>
           </div>
 
-          <!-- Dossier Results Area -->
           <div id="dossierResultArea" class="hidden space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800">
-              <div class="flex items-center gap-2">
-                <span class="text-emerald-400 font-bold text-xs flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> Dossier Ready</span>
-                <span id="dossierMetadataBadge" class="text-slate-400 text-[11px] font-mono">Generated via Kimi-k3</span>
+            <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-ds bg-white">
+              <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0">
+                <span class="text-ds-success font-bold text-xs flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> Report ready</span>
+                <span id="dossierMetadataBadge" class="text-ds-muted text-[11px] font-mono truncate"></span>
               </div>
-              <div class="flex items-center gap-2">
-                <button onclick="copyDossierMarkdown()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95">
+              <div class="flex items-center gap-2 flex-wrap">
+                <button onclick="copyDossierMarkdown()" class="btn-ghost px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1.5">
                   <i class="fa-regular fa-copy"></i> Copy MD
                 </button>
-                <button onclick="exportDossier('md')" class="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow active:scale-95">
+                <button onclick="exportDossier('md')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1.5">
                   <i class="fa-solid fa-file-lines"></i> Export MD
                 </button>
-                <button onclick="exportDossier('pdf')" class="px-3 py-1.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow active:scale-95">
+                <button onclick="exportDossier('pdf')" class="btn-ghost px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1.5">
                   <i class="fa-solid fa-file-pdf"></i> Export PDF
                 </button>
               </div>
             </div>
-
-            <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 max-h-[480px] overflow-y-auto">
-              <pre id="dossierMarkdownContent" class="font-mono text-xs text-slate-200 whitespace-pre-wrap leading-relaxed"></pre>
+            <div class="p-5 rounded-xl max-h-[480px] overflow-y-auto dossier-markdown-view">
+              <pre id="dossierMarkdownContent" class="whitespace-pre-wrap m-0 bg-transparent border-0 p-0 text-inherit font-inherit text-xs"></pre>
             </div>
           </div>
         </div>
@@ -1646,28 +2025,31 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </div>
 
     <!-- SAFE CONFIRM DELETION MODAL -->
-    <div id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 modal-overlay">
-      <div class="glass-card border border-red-500/40 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4 modal-card">
-        <div class="flex items-center gap-3 text-red-400">
-          <div class="w-10 h-10 rounded-full bg-red-950/60 border border-red-500/40 flex items-center justify-center text-lg shrink-0">
+    <div id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeDeleteConfirmModal()">
+      <div class="bg-white border border-ds w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 space-y-4 modal-card">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center text-lg shrink-0">
             <i class="fa-solid fa-triangle-exclamation"></i>
           </div>
           <div>
-            <h4 id="deleteModalTitle" class="text-sm font-bold text-slate-100">Confirm Selective Deletion</h4>
-            <p class="text-[11px] text-slate-400">Database preservation safe removal</p>
+            <h4 id="deleteModalTitle" class="text-sm font-bold text-[#1c1b1b]">Confirm Selective Deletion</h4>
+            <p class="text-xs text-ds-muted mt-0.5">Database preservation safe removal</p>
           </div>
         </div>
 
-        <div class="text-xs text-slate-300 leading-relaxed">
-          Are you sure you want to delete <span id="deleteTargetName" class="font-bold text-red-300 font-mono"></span>?
-          <p id="deleteTargetWarning" class="text-slate-400 mt-2 text-[11px]">This will selectively purge this document from the local ChromaDB vector store. This action is irreversible.</p>
+        <div class="text-xs text-[#1c1b1b] leading-relaxed">
+          Are you sure you want to delete <span id="deleteTargetName" class="font-mono font-bold text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200"></span>?
+          <div class="mt-3 p-3 bg-red-50/70 border border-red-200/80 rounded-xl text-red-900 text-xs flex items-start gap-2.5">
+            <i class="fa-solid fa-shield-halved text-red-500 mt-0.5 text-xs shrink-0"></i>
+            <p id="deleteTargetWarning" class="text-[11px] leading-snug">This will selectively purge this document from the local ChromaDB vector store. Other domains and history remain untouched.</p>
+          </div>
         </div>
 
-        <div class="flex justify-end items-center gap-2 pt-3 border-t border-slate-800">
-          <button onclick="closeDeleteConfirmModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-all active:scale-95">
+        <div class="flex justify-end items-center gap-2 pt-3 border-t border-ds">
+          <button onclick="closeDeleteConfirmModal()" class="btn-ghost px-4 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-[#1c1b1b] transition-all active:scale-95">
             Cancel
           </button>
-          <button id="btnExecuteDelete" onclick="executeDeletion()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow">
+          <button id="btnExecuteDelete" onclick="executeDeletion()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-sm">
             <i class="fa-solid fa-trash-can"></i> Delete Permanently
           </button>
         </div>
@@ -1675,18 +2057,20 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     </div>
 
     <!-- Add Custom RPA Step Modal -->
-    <div id="customRpaStepModal" role="dialog" aria-modal="true" aria-labelledby="rpaModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 modal-overlay">
-      <div class="glass-card border border-purple-500/40 w-full max-w-md rounded-2xl p-5 shadow-2xl space-y-4 text-xs modal-card">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
-          <h4 id="rpaModalTitle" class="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <i class="fa-solid fa-robot text-purple-400"></i> Add Interactive RPA Step
+    <div id="customRpaStepModal" role="dialog" aria-modal="true" aria-labelledby="rpaModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeCustomRpaStepModal()">
+      <div class="bg-white border border-ds w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 text-xs modal-card">
+        <div class="flex justify-between items-center border-b border-ds pb-3">
+          <h4 id="rpaModalTitle" class="text-sm font-bold text-[#1c1b1b] flex items-center gap-2">
+            <i class="fa-solid fa-robot text-purple-600"></i> Add Interactive RPA Step
           </h4>
-          <button onclick="closeCustomRpaStepModal()" class="text-slate-400 hover:text-white w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg hover:bg-slate-800 flex items-center justify-center transition" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+          <button onclick="closeCustomRpaStepModal()" class="btn-icon" aria-label="Close modal">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
         </div>
-        <div class="space-y-3">
+        <div class="space-y-3.5">
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Action Type</label>
-            <select id="rpaStepAction" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500">
+            <label class="ethic-label block mb-1">Action Type</label>
+            <select id="rpaStepAction" class="w-full px-3 py-2 text-xs rounded-lg border border-ds bg-white text-[#1c1b1b]">
               <option value="click">🖱️ Click Element</option>
               <option value="fill">✍️ Fill Input / Textarea</option>
               <option value="select">📋 Select Dropdown Option</option>
@@ -1698,23 +2082,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </select>
           </div>
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Selector (CSS or Text)</label>
-            <input id="rpaStepSelector" type="text" placeholder="e.g. button:has-text('Annual'), #submit-btn, .tab-specs" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500">
+            <div class="flex justify-between items-center mb-1">
+              <label class="ethic-label">Selector (CSS or Text)</label>
+              <button type="button" onclick="openElementPickerFromRpa()" class="text-[11px] text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-1 hover:underline">
+                <i class="fa-solid fa-crosshairs"></i> Visual Picker
+              </button>
+            </div>
+            <input id="rpaStepSelector" type="text" placeholder="e.g. button:has-text('Annual'), #submit-btn, .tab-specs" class="w-full px-3 py-2 text-xs rounded-lg border border-ds bg-white text-[#1c1b1b] font-mono">
           </div>
           <div>
-            <label class="block font-semibold text-slate-300 mb-1">Value / Text / Key (Optional)</label>
-            <input id="rpaStepValue" type="text" placeholder="e.g. text to fill, option value, key name, or scroll px" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500">
+            <label class="ethic-label block mb-1">Value / Text / Key (Optional)</label>
+            <input id="rpaStepValue" type="text" placeholder="e.g. text to fill, option value, key name, or scroll px" class="w-full px-3 py-2 text-xs rounded-lg border border-ds bg-white text-[#1c1b1b]">
           </div>
           <div class="flex items-center justify-between pt-1">
-            <label class="flex items-center gap-2 cursor-pointer text-slate-300">
-              <input type="checkbox" id="rpaStepOptional" checked class="rounded bg-slate-950 border-slate-700 text-purple-600 focus:ring-0">
-              <span>Optional (don't fail crawl if not found)</span>
+            <label class="flex items-center gap-2 cursor-pointer text-[#1c1b1b] select-none text-xs">
+              <input type="checkbox" id="rpaStepOptional" checked class="rounded border-ds text-purple-600 focus:ring-0">
+              <span>Optional step (don't fail crawl if not found)</span>
             </label>
           </div>
         </div>
-        <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
-          <button onclick="closeCustomRpaStepModal()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg active:scale-95 transition-all">Cancel</button>
-          <button onclick="commitCustomRpaStep()" class="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold active:scale-95 transition-all">Add Step</button>
+        <div class="flex justify-end gap-2 pt-3 border-t border-ds">
+          <button onclick="closeCustomRpaStepModal()" class="btn-ghost px-4 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-[#1c1b1b] transition-all active:scale-95">Cancel</button>
+          <button onclick="commitCustomRpaStep()" class="cta-primary px-4 py-2 text-xs font-bold rounded-lg transition-all active:scale-95">Add Step</button>
         </div>
       </div>
     </div>
@@ -1782,6 +2171,696 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- THEME & DESIGN STUDIO MODAL -->
+    <div id="themeStudioModal" role="dialog" aria-modal="true" aria-labelledby="themeStudioTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeThemeStudioModal()">
+      <div class="modal-card bg-white border border-ds rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden text-[#1c1b1b]">
+        <!-- Modal Header -->
+        <div class="p-5 border-b border-ds flex items-center justify-between bg-ds-surface-low">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 border border-purple-200 flex items-center justify-center text-lg shadow-xs">
+              <i class="fa-solid fa-palette"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 id="themeStudioTitle" class="text-base font-bold font-mono text-[#1c1b1b]">THEME & DESIGN STUDIO</h2>
+                <span id="studioActiveBadge" class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200">Ethic Neo</span>
+              </div>
+              <p class="text-xs text-ds-muted mt-0.5">Centralized Design System & Appearance Engine · Instant Live Preview · 1-Click Replace</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeThemeStudioModal()" class="w-8 h-8 rounded-lg border border-ds flex items-center justify-center text-ds-muted hover:text-[#1c1b1b] hover:bg-white transition" aria-label="Close Studio">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Studio Navigation Tabs -->
+        <div class="px-5 pt-3 pb-2 border-b border-ds flex items-center gap-2 bg-white text-xs font-semibold overflow-x-auto">
+          <button type="button" id="studioTabPresetsBtn" onclick="switchStudioTab('presets')" class="px-3 py-1.5 rounded-lg bg-ds-surface-low text-ds-primary border border-ds flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-swatchbook"></i> Curated Presets
+          </button>
+          <button type="button" id="studioTabColorsBtn" onclick="switchStudioTab('colors')" class="px-3 py-1.5 rounded-lg text-ds-muted hover:text-[#1c1b1b] flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-eye-dropper"></i> Color Palette & Tokens
+          </button>
+          <button type="button" id="studioTabTypographyBtn" onclick="switchStudioTab('typography')" class="px-3 py-1.5 rounded-lg text-ds-muted hover:text-[#1c1b1b] flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-font"></i> Typography & Fonts
+          </button>
+          <button type="button" id="studioTabSandboxBtn" onclick="switchStudioTab('sandbox')" class="px-3 py-1.5 rounded-lg text-ds-muted hover:text-[#1c1b1b] flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-cube"></i> Live Component Sandbox
+          </button>
+        </div>
+
+        <!-- Modal Body (Scrollable) -->
+        <div class="p-6 overflow-y-auto space-y-6 flex-1 bg-[#fafafa]">
+          
+          <!-- TAB 1: CURATED PRESETS -->
+          <div id="studioTabPresets" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-[#1c1b1b]">Curated Design Presets</h3>
+                <p class="text-xs text-ds-muted">Click any preset card to switch the entire application theme in real time.</p>
+              </div>
+              <button type="button" onclick="resetThemeToDefault()" class="btn-ghost px-3 py-1 text-[11px] flex items-center gap-1.5 text-slate-700">
+                <i class="fa-solid fa-arrow-rotate-left text-[10px]"></i> Reset to Default
+              </button>
+            </div>
+            <div id="themePresetsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <!-- Dynamically populated by JS from THEME_REGISTRY -->
+            </div>
+          </div>
+
+          <!-- TAB 2: PALETTE & TOKENS -->
+          <div id="studioTabColors" class="hidden space-y-4">
+            <div>
+              <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-[#1c1b1b]">Custom Color Palette & Tokens</h3>
+              <p class="text-xs text-ds-muted">Adjust any token color. Updates apply immediately to both the live application and preview sandbox.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="colorTokensGrid">
+              <!-- Dynamically populated by JS -->
+            </div>
+          </div>
+
+          <!-- TAB 3: TYPOGRAPHY -->
+          <div id="studioTabTypography" class="hidden space-y-4">
+            <div>
+              <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-[#1c1b1b]">Typography & Font Pairings</h3>
+              <p class="text-xs text-ds-muted">Curated font pairings optimized for readability, hierarchy, and code aesthetics.</p>
+            </div>
+            <div id="fontPairingsList" class="space-y-3">
+              <!-- Dynamically populated by JS -->
+            </div>
+          </div>
+
+          <!-- TAB 4: COMPONENT SANDBOX -->
+          <div id="studioTabSandbox" class="hidden space-y-5">
+            <div>
+              <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-[#1c1b1b]">Interactive Live Component Sandbox</h3>
+              <p class="text-xs text-ds-muted">Test how buttons, form controls, cards, and status pills look under the active theme configuration.</p>
+            </div>
+            <div class="p-6 bg-white border border-ds rounded-xl space-y-6 shadow-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="p-4 rounded-xl border border-ds bg-ds-surface-low space-y-2">
+                  <div class="text-[10px] font-mono font-bold text-ds-muted uppercase">Primary Button</div>
+                  <button type="button" class="cta-primary px-4 py-2 w-full text-xs">Execute Ingestion</button>
+                </div>
+                <div class="p-4 rounded-xl border border-ds bg-ds-surface-low space-y-2">
+                  <div class="text-[10px] font-mono font-bold text-ds-muted uppercase">Ghost Button</div>
+                  <button type="button" class="btn-ghost px-4 py-2 w-full text-xs text-center block">Inspect Payload</button>
+                </div>
+                <div class="p-4 rounded-xl border border-ds bg-ds-surface-low space-y-2">
+                  <div class="text-[10px] font-mono font-bold text-ds-muted uppercase">Status Badges</div>
+                  <div class="flex items-center gap-2 pt-1">
+                    <span class="status-pill ok">ACTIVE</span>
+                    <span class="status-pill bad">OFFLINE</span>
+                    <span class="chip-export"><i class="fa-solid fa-file-pdf mr-1"></i>PDF</span>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label class="ethic-label">Sample Input Field</label>
+                <input type="text" class="w-full px-3 py-2 border rounded-lg text-xs" value="https://example.com/api/v1/news" readonly>
+              </div>
+              <div class="p-4 rounded-xl border border-ds bg-white space-y-2 shadow-xs">
+                <div class="flex items-center justify-between">
+                  <h4 class="font-bold text-sm">Sample Card Container</h4>
+                  <span class="text-[10px] font-mono text-ds-muted">CARD PREVIEW</span>
+                </div>
+                <p class="text-xs text-ds-muted">This card dynamically adapts to your card background, border, font pairings, and shadow tokens.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Modal Footer & 1-Click Replace Actions -->
+        <div class="p-4 border-t border-ds bg-white flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" onclick="copyCssVariables()" class="px-3 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-slate-800 flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-copy text-ds-primary"></i> Copy CSS :root
+            </button>
+            <button type="button" onclick="copyThemeJson()" class="px-3 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-slate-800 flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-code text-purple-600"></i> Copy Theme JSON
+            </button>
+            <button type="button" onclick="downloadThemeJson()" class="px-3 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-slate-800 flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-download text-teal-600"></i> Export JSON
+            </button>
+            <button type="button" onclick="promptImportThemeJson()" class="px-3 py-2 text-xs font-semibold rounded-lg border border-ds hover:bg-ds-surface-low text-slate-800 flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-upload text-blue-600"></i> Import JSON
+            </button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeThemeStudioModal()" class="btn-ghost px-4 py-2 text-xs text-slate-700">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCHEDULES & AUTONOMOUS MONITORS MODAL -->
+    <div id="schedulesModal" role="dialog" aria-modal="true" aria-labelledby="schedulesModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeSchedulesModal()">
+      <div class="modal-card bg-white border border-ds rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden text-[#1c1b1b]">
+        <!-- Header -->
+        <div class="p-5 border-b border-ds flex items-center justify-between bg-ds-surface-low">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center text-lg shadow-xs">
+              <i class="fa-solid fa-clock"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 id="schedulesModalTitle" class="text-base font-bold font-mono text-[#1c1b1b]">AUTONOMOUS SCHEDULES & MONITORS</h2>
+                <span id="schedulesActiveBadge" class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-blue-100 text-blue-800 border border-blue-200">24/7 Engine</span>
+              </div>
+              <p class="text-xs text-ds-muted mt-0.5">Continuous Monitoring · Semantic Content Diffing · Webhook Alerts</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeSchedulesModal()" class="w-8 h-8 rounded-lg border border-ds flex items-center justify-center text-ds-muted hover:text-[#1c1b1b] hover:bg-white transition" aria-label="Close Monitors">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Add Monitor Quick Bar -->
+        <div class="p-4 bg-white border-b border-ds">
+          <form id="createScheduleForm" onsubmit="handleCreateSchedule(event)" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
+              <div class="md:col-span-5 space-y-1">
+                <label class="ethic-label">Target URL to Monitor</label>
+                <input type="url" id="schedUrlInput" required placeholder="https://example.com/pricing" class="w-full px-3 py-1.5 text-xs border rounded-lg">
+              </div>
+              <div class="md:col-span-3 space-y-1">
+                <label class="ethic-label">Monitor Name</label>
+                <input type="text" id="schedNameInput" placeholder="e.g. Pricing Monitor" class="w-full px-3 py-1.5 text-xs border rounded-lg">
+              </div>
+              <div class="md:col-span-2 space-y-1">
+                <label class="ethic-label">Interval</label>
+                <select id="schedIntervalInput" class="w-full px-2 py-1.5 text-xs border rounded-lg">
+                  <option value="10m">Every 10 min</option>
+                  <option value="30m">Every 30 min</option>
+                  <option value="1h" selected>Hourly (1h)</option>
+                  <option value="6h">Every 6 hrs</option>
+                  <option value="12h">Every 12 hrs</option>
+                  <option value="24h">Daily (24h)</option>
+                  <option value="7d">Weekly (7d)</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <button type="submit" id="createScheduleBtn" class="cta-primary w-full py-2 text-xs flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-plus text-[10px]"></i> Add Monitor
+                </button>
+              </div>
+            </div>
+            <!-- Optional Advanced Drawer -->
+            <details class="text-[11px] text-ds-muted">
+              <summary class="cursor-pointer hover:text-slate-800 font-mono text-[10px] uppercase font-bold text-ds-accent">
+                <i class="fa-solid fa-gear mr-1"></i> Advanced Options (Webhook, Engine Strategy)
+              </summary>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div class="space-y-1">
+                  <label class="ethic-label">Outbound Webhook URL (Slack, Discord, Zapier)</label>
+                  <input type="url" id="schedWebhookInput" placeholder="https://hooks.slack.com/services/..." class="w-full px-3 py-1.5 text-xs border rounded-lg">
+                </div>
+                <div class="space-y-1">
+                  <label class="ethic-label">Engine Strategy</label>
+                  <select id="schedStrategyInput" class="w-full px-2 py-1.5 text-xs border rounded-lg">
+                    <option value="auto" selected>Auto-Escalate (Light HTTP + Browser SPA)</option>
+                    <option value="browser">Headless Browser (Playwright)</option>
+                    <option value="http">Fast Async HTTP</option>
+                  </select>
+                </div>
+              </div>
+            </details>
+          </form>
+        </div>
+
+        <!-- Body / Monitors Table -->
+        <div class="p-5 overflow-y-auto flex-1 bg-[#fafafa] space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-mono font-bold uppercase tracking-wider text-[#1c1b1b]">Active Monitors (<span id="schedulesTableCount">0</span>)</h3>
+            <button type="button" onclick="loadSchedulesTable()" class="btn-ghost px-2.5 py-1 text-[11px] flex items-center gap-1 text-slate-700">
+              <i class="fa-solid fa-rotate text-[10px]"></i> Refresh
+            </button>
+          </div>
+          <div id="schedulesTableWrap" class="rounded-xl border border-ds overflow-x-auto bg-white shadow-xs">
+            <table class="modal-table w-full text-left text-xs">
+              <thead class="sticky top-0 modal-table">
+                <tr>
+                  <th>Target & Name</th>
+                  <th>Frequency</th>
+                  <th>Last Checked</th>
+                  <th>Next Run</th>
+                  <th>Status & Diff</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="schedulesTableBody" class="divide-y divide-[#e5e2e1]">
+                <tr>
+                  <td colspan="6" class="p-4 text-center text-xs text-ds-muted">Loading monitors...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-ds bg-white flex items-center justify-between">
+          <div class="text-[11px] text-ds-muted flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full status-dot-active"></span>
+            <span>Scheduler running in background (15s tick loop)</span>
+          </div>
+          <button type="button" onclick="closeSchedulesModal()" class="btn-ghost px-4 py-2 text-xs text-slate-700">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT DIFF MODAL -->
+    <div id="diffModal" role="dialog" aria-modal="true" aria-labelledby="diffModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeDiffModal()">
+      <div class="modal-card bg-white border border-ds rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden text-[#1c1b1b]">
+        <!-- Header -->
+        <div class="p-5 border-b border-ds flex items-center justify-between bg-ds-surface-low">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 border border-purple-200 flex items-center justify-center text-lg shadow-xs">
+              <i class="fa-solid fa-code-compare"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 id="diffModalTitle" class="text-base font-bold font-mono text-[#1c1b1b]">CONTENT DIFF INSPECTOR</h2>
+                <span id="diffSimilarityBadge" class="px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">100% Match</span>
+              </div>
+              <p id="diffSubtitle" class="text-xs text-ds-muted mt-0.5 font-mono">Comparing latest crawl vs historical baseline</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeDiffModal()" class="w-8 h-8 rounded-lg border border-ds flex items-center justify-center text-ds-muted hover:text-[#1c1b1b] hover:bg-white transition" aria-label="Close Diff">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Metric Badges Bar -->
+        <div class="p-3 bg-white border-b border-ds flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md">
+              <i class="fa-solid fa-plus text-[10px]"></i> <span id="diffAddedCount">0</span> additions
+            </span>
+            <span class="inline-flex items-center gap-1 font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-md">
+              <i class="fa-solid fa-minus text-[10px]"></i> <span id="diffRemovedCount">0</span> deletions
+            </span>
+          </div>
+          <div id="diffSummaryText" class="text-xs font-semibold text-slate-700">No content changes detected.</div>
+        </div>
+
+        <!-- Diff Viewer Body -->
+        <div class="p-4 overflow-y-auto flex-1 bg-[#0f172a] text-[#f8fafc] font-mono text-xs">
+          <div id="diffHtmlContainer" class="space-y-0.5">
+            <!-- Populated with color-coded diff lines -->
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-ds bg-white flex items-center justify-end">
+          <button type="button" onclick="closeDiffModal()" class="btn-ghost px-4 py-2 text-xs text-slate-700">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- INTERACTIVE POINT-AND-CLICK ELEMENT PICKER MODAL -->
+    <div id="elementPickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeElementPicker()">
+      <div class="glass-card w-full max-w-6xl flex flex-col h-[90vh] overflow-hidden modal-card">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-3 border-b border-ds bg-white/95">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-sm font-bold">
+              <i class="fa-solid fa-crosshairs"></i>
+            </span>
+            <div>
+              <h2 id="pickerModalTitle" class="text-sm font-bold text-[#1c1b1b]">Visual Element Picker</h2>
+              <p id="pickerTargetUrlText" class="text-xs text-ds-muted font-mono truncate max-w-md">Hover and click any element to generate CSS selector</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="refreshPickerIframe()" class="btn-ghost px-2.5 py-1.5 text-xs text-slate-700 flex items-center gap-1" title="Reload iframe">
+              <i class="fa-solid fa-rotate-right"></i> Reload
+            </button>
+            <button type="button" onclick="closeElementPicker()" class="btn-icon" aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Toolbar / Selected details -->
+        <div class="px-5 py-2.5 border-b border-ds bg-slate-50 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2 flex-1 min-w-[280px]">
+            <span class="font-semibold text-slate-600 shrink-0">Selector:</span>
+            <input id="pickerSelectorInput" type="text" readonly placeholder="Click an element in the preview below..." class="w-full px-3 py-1.5 font-mono text-xs rounded border border-ds bg-white text-slate-900 select-all font-semibold">
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span id="pickerTagBadge" class="hidden px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[11px] font-bold">TAG</span>
+            <span id="pickerMatchesBadge" class="hidden px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-mono text-[11px] font-semibold">1 match</span>
+            <button type="button" onclick="copyPickerSelector()" class="btn-ghost px-2.5 py-1 text-xs border border-ds bg-white flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i> Copy
+            </button>
+            <button type="button" id="pickerApplyBtn" onclick="applyPickerSelector()" class="cta-primary px-3 py-1 text-xs font-semibold rounded flex items-center gap-1">
+              <i class="fa-solid fa-check"></i> Use Selector
+            </button>
+          </div>
+        </div>
+
+        <!-- Sandboxed iframe container -->
+        <div class="flex-1 bg-slate-200 relative overflow-hidden">
+          <div id="pickerLoading" class="absolute inset-0 bg-white/80 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-10 hidden">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl text-purple-600"></i>
+            <span class="text-xs font-medium text-slate-600">Loading and instrumenting page DOM...</span>
+          </div>
+          <iframe id="pickerSandboxIframe" class="w-full h-full border-0 bg-white" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPETITIVE BENCHMARK & TECHNOLOGY PROFILER MODAL -->
+    <div id="competitorModal" role="dialog" aria-modal="true" aria-labelledby="benchmarkModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeCompetitorModal()">
+      <div class="glass-card w-full max-w-5xl flex flex-col h-[90vh] overflow-hidden modal-card">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-ds bg-white">
+          <div class="flex items-center gap-3">
+            <span class="w-9 h-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center text-base font-bold">
+              <i class="fa-solid fa-chart-simple"></i>
+            </span>
+            <div>
+              <h2 id="benchmarkModalTitle" class="text-base font-bold text-[#1c1b1b]">Competitive Benchmarking & Tech Profiler</h2>
+              <p class="text-xs text-ds-muted">Compare 2 to 5 indexed competitor domains side-by-side using ChromaDB knowledge</p>
+            </div>
+          </div>
+          <button type="button" onclick="closeCompetitorModal()" class="btn-icon" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Controls: Domain Selection -->
+        <div class="px-5 py-3 border-b border-ds bg-slate-50/80 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-bold text-slate-700">Select Competitor Domains to Compare (2 to 5):</span>
+            <div class="flex items-center gap-2">
+              <input id="benchmarkFocusInput" type="text" placeholder="Custom Focus (e.g. pricing, AI features, security)" class="px-3 py-1 text-xs rounded border border-ds bg-white w-72">
+              <button type="button" id="btnRunBenchmark" onclick="runCompetitorBenchmark()" class="cta-primary px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-play"></i> Generate Benchmark
+              </button>
+            </div>
+          </div>
+          <div id="benchmarkDomainList" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1.5 bg-white border border-ds rounded-lg">
+            <span class="text-xs text-slate-400 italic">Loading domains from knowledge base...</span>
+          </div>
+        </div>
+
+        <!-- Body / Results View -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-4 bg-white" id="benchmarkResultsArea">
+          <div id="benchmarkEmptyState" class="py-16 text-center text-slate-500 space-y-3">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto text-xl">
+              <i class="fa-solid fa-scale-balanced"></i>
+            </div>
+            <p class="text-sm font-medium">Select at least 2 domains above and click "Generate Benchmark"</p>
+            <p class="text-xs text-slate-400 max-w-md mx-auto">The engine will cross-examine stored pages, synthesize value propositions, compare pricing models, and fingerprint technology stacks.</p>
+          </div>
+
+          <div id="benchmarkLoading" class="py-20 text-center space-y-3 hidden">
+            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-amber-600"></i>
+            <p class="text-sm font-semibold text-slate-700">Synthesizing multi-domain competitive matrix...</p>
+            <p class="text-xs text-slate-400">Analyzing ChromaDB vectors and fingerprinting tech stacks</p>
+          </div>
+
+          <div id="benchmarkContent" class="space-y-6 hidden">
+            <!-- Action Toolbar for Export -->
+            <div class="flex items-center justify-between pb-3 border-b border-ds">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-700">Model Engine:</span>
+                <span id="benchmarkModelBadge" class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[11px] text-slate-700 border border-slate-200">heuristic-synthesis</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="exportCompetitorBenchmark('pdf')" class="btn-ghost px-3 py-1.5 text-xs font-semibold rounded border border-ds bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-regular fa-file-pdf text-rose-600"></i> Export PDF
+                </button>
+                <button type="button" onclick="exportCompetitorBenchmark('markdown')" class="btn-ghost px-3 py-1.5 text-xs font-semibold rounded border border-ds bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-regular fa-file-code text-blue-600"></i> Export Markdown
+                </button>
+              </div>
+            </div>
+
+            <!-- Side-by-Side Matrix Table Container -->
+            <div class="overflow-x-auto rounded-xl border border-ds">
+              <div id="benchmarkTableContainer" class="p-2 prose prose-xs max-w-none text-xs">
+                <!-- Rendered Markdown Table -->
+              </div>
+            </div>
+
+            <!-- Full In-Depth Breakdown -->
+            <div id="benchmarkReportContainer" class="space-y-4 pt-4 border-t border-ds prose prose-sm max-w-none">
+              <!-- Rendered report sections -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-3 border-t border-ds bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <span>Ethical passive fingerprinting & cross-domain analysis</span>
+          <button type="button" onclick="closeCompetitorModal()" class="btn-ghost px-4 py-1.5 font-semibold text-slate-700">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISUAL PRODUCT BLUEPRINT & REVERSE-ENGINEERING MODAL -->
+    <div id="blueprintModal" role="dialog" aria-modal="true" aria-labelledby="blueprintModalTitle" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay-bg backdrop-blur-sm p-4 modal-overlay" onclick="if(event.target===this) closeBlueprintModal()">
+      <div class="glass-card w-full max-w-6xl flex flex-col h-[92vh] overflow-hidden modal-card">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-3.5 border-b border-ds bg-white">
+          <div class="flex items-center gap-3">
+            <span class="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center text-base font-bold">
+              <i class="fa-solid fa-camera-retro"></i>
+            </span>
+            <div>
+              <h2 id="blueprintModalTitle" class="text-base font-bold text-[#1c1b1b]">Visual Product Blueprint & Reverse-Engineering</h2>
+              <p class="text-xs text-ds-muted">Deconstruct multi-page screenshot archives into full-stack specs, diagrams, and API contracts</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeBlueprintModal()" class="btn-icon" aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls: Domain Selector & Action Bar -->
+        <div class="px-5 py-3 border-b border-ds bg-slate-50 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2.5 flex-1 min-w-[280px]">
+            <span class="font-bold text-slate-700 shrink-0">Target Domain:</span>
+            <select id="blueprintDomainSelect" onchange="onBlueprintDomainChange()" class="w-52 px-3 py-1.5 rounded border border-ds bg-white text-slate-900 font-mono text-xs">
+              <option value="">Select an indexed domain...</option>
+            </select>
+            <span class="font-bold text-slate-700 shrink-0">Vision Model:</span>
+            <select id="blueprintModelSelect" class="w-64 px-2.5 py-1.5 rounded border border-teal-300 bg-teal-50 text-slate-900 font-medium text-xs focus:ring-1 focus:ring-teal-500">
+              <option value="meta/llama-3.2-90b-vision-instruct" selected>🧠 Llama 3.2 90B Vision (Highest Quality)</option>
+              <option value="meta/llama-3.2-11b-vision-instruct">⚡ Llama 3.2 11B Vision (Fastest)</option>
+              <option value="microsoft/phi-3.5-vision-instruct">📄 Phi-3.5 Vision (Charts/Docs)</option>
+              <option value="z-ai/glm-5.3-flash">🔥 GLM 5.3 Flash (Fast + Reasoning)</option>
+              <option value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning">🤖 Nemotron 3 Nano Omni 30B (Reasoning)</option>
+            </select>
+            <input id="blueprintFocusInput" type="text" placeholder="Custom Focus (e.g. admin workflows, RBAC, billing)" class="flex-1 min-w-[160px] px-3 py-1.5 rounded border border-ds bg-white text-xs">
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="toggleBlueprintUploadSection()" class="btn-ghost px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 border border-slate-300">
+              <i class="fa-solid fa-cloud-arrow-up text-teal-600"></i> Upload Screens
+            </button>
+            <button type="button" id="btnRunBlueprint" onclick="runGenerateBlueprint()" class="cta-primary px-4 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-microchip"></i> Deconstruct & Generate Blueprint
+            </button>
+          </div>
+        </div>
+
+        <!-- In-Browser Screenshot & Folder Uploader -->
+        <div id="blueprintUploadSection" class="hidden px-5 py-3.5 border-b border-ds bg-teal-50/60 flex flex-col gap-3 text-xs">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded bg-teal-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+                <i class="fa-solid fa-cloud-arrow-up"></i>
+              </span>
+              <span class="font-bold text-teal-950 text-sm">Upload Screenshots or Screenshot Folder</span>
+              <span class="text-slate-500 font-normal text-xs ml-1">Assign images directly to any domain</span>
+            </div>
+            <button type="button" onclick="toggleBlueprintUploadSection()" class="btn-icon text-slate-400 hover:text-slate-600" aria-label="Close upload drawer">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- Domain Destination Dropdown & Custom Domain Field -->
+          <div class="p-3 bg-white rounded-lg border border-teal-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[320px]">
+              <span class="font-bold text-slate-700 shrink-0 flex items-center gap-1.5">
+                <i class="fa-solid fa-globe text-teal-600"></i> Target Domain:
+              </span>
+              <select id="blueprintUploadDomainSelect" onchange="onBlueprintUploadDomainSelectChange()" class="px-3 py-1.5 rounded border border-ds bg-slate-50 text-slate-900 font-mono text-xs focus:ring-1 focus:ring-teal-500">
+                <option value="__NEW__">➕ Create New Domain / Project...</option>
+              </select>
+              <input id="blueprintUploadDomainInput" type="text" placeholder="Type new domain or app name (e.g. plexis.in, my-app.com)" oninput="document.getElementById('blueprintUploadTargetBadge').textContent=this.value.trim()||'(New Domain)'" class="w-64 px-3 py-1.5 rounded border border-ds bg-white text-xs focus:ring-1 focus:ring-teal-500">
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] text-slate-500">Destination:</span>
+              <span id="blueprintUploadTargetBadge" class="font-mono font-bold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded text-[11px]">(New Domain)</span>
+            </div>
+          </div>
+
+          <!-- Dual Mode Upload Controls: Individual Files OR Entire Folder -->
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <input id="blueprintUploadFileInput" type="file" multiple accept="image/png,image/jpeg,image/webp" onchange="onBlueprintFileSelect(event)" class="hidden">
+              <input id="blueprintUploadFolderInput" type="file" webkitdirectory directory multiple accept="image/png,image/jpeg,image/webp" onchange="onBlueprintFolderSelect(event)" class="hidden">
+              <button type="button" onclick="document.getElementById('blueprintUploadFileInput').click()" class="btn-ghost px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 border border-slate-300 bg-white hover:bg-slate-50 shadow-xs">
+                <i class="fa-solid fa-images text-teal-600"></i> Choose Image Files
+              </button>
+              <button type="button" onclick="document.getElementById('blueprintUploadFolderInput').click()" class="btn-ghost px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 border border-slate-300 bg-white hover:bg-slate-50 shadow-xs">
+                <i class="fa-solid fa-folder-open text-amber-600"></i> Choose Entire Folder
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="blueprintUploadStatus" class="text-xs font-mono text-slate-600"></span>
+              <button type="button" id="btnSubmitBlueprintUpload" onclick="submitBlueprintUpload()" class="cta-primary px-4 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Upload & Catalog
+              </button>
+            </div>
+          </div>
+
+          <!-- Drag and Drop Zone supporting both Files & Folders -->
+          <div id="blueprintUploadDropzone" ondragover="event.preventDefault(); this.classList.add('border-teal-500', 'bg-teal-100/40');" ondragleave="this.classList.remove('border-teal-500', 'bg-teal-100/40');" ondrop="handleBlueprintDrop(event)" class="border-2 border-dashed border-teal-300 rounded-lg p-4 text-center text-slate-500 hover:border-teal-500 transition cursor-pointer bg-white/70">
+            <div class="flex flex-col items-center gap-1">
+              <i class="fa-solid fa-folder-arrow-up text-teal-600 text-lg"></i>
+              <span class="text-xs font-medium text-slate-700">Drag & drop screenshot files or an entire folder here</span>
+              <span class="text-[11px] text-slate-400">Supported: .png, .jpg, .jpeg, .webp (Automatic folder name auto-detection)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scroll-Snap Screenshot Carousel (Modern Web Guidance) -->
+        <div class="px-5 py-2.5 border-b border-ds bg-slate-100/70">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+              <i class="fa-solid fa-film text-teal-600"></i> Screenshot Storyboard Scroller
+            </span>
+            <span id="blueprintScreenCountBadge" class="text-[11px] font-mono text-slate-500">0 screens cataloged</span>
+          </div>
+          <div id="blueprintScreenshotCarousel" class="flex gap-3 overflow-x-auto pb-2 scroll-smooth" style="scroll-snap-type: x mandatory;">
+            <div class="p-4 text-center text-xs text-slate-400 w-full italic">Select a domain above to view its captured screenshot collection.</div>
+          </div>
+        </div>
+
+        <!-- Accessible Navigation Tabs (role="tablist") -->
+        <div class="px-5 border-b border-ds bg-white flex items-center justify-between gap-2 overflow-x-auto">
+          <div role="tablist" aria-label="Blueprint Sections" class="flex items-center gap-2 text-xs">
+            <button type="button" role="tab" id="tabBtn_storyboard" aria-selected="true" onclick="switchBlueprintTab('storyboard')" class="px-3 py-2.5 font-bold border-b-2 border-teal-600 text-teal-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-map"></i> Storyboard & Personas
+            </button>
+            <button type="button" role="tab" id="tabBtn_diagrams" aria-selected="false" onclick="switchBlueprintTab('diagrams')" class="px-3 py-2.5 font-bold border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+              <i class="fa-solid fa-diagram-project"></i> Mermaid Diagrams (Flow & ERD)
+            </button>
+            <button type="button" role="tab" id="tabBtn_frontend" aria-selected="false" onclick="switchBlueprintTab('frontend')" class="px-3 py-2.5 font-bold border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+              <i class="fa-solid fa-palette"></i> Frontend & UI Tokens
+            </button>
+            <button type="button" role="tab" id="tabBtn_backend" aria-selected="false" onclick="switchBlueprintTab('backend')" class="px-3 py-2.5 font-bold border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center gap-1.5">
+              <i class="fa-solid fa-server"></i> Backend APIs & Schemas
+            </button>
+          </div>
+          <div id="blueprintExportActions" class="hidden items-center gap-2 py-1 shrink-0">
+            <button type="button" onclick="exportBlueprint('pdf')" class="btn-ghost px-2.5 py-1 text-xs border border-ds rounded bg-white text-slate-700 flex items-center gap-1 hover:bg-slate-50">
+              <i class="fa-regular fa-file-pdf text-rose-600"></i> Export PDF
+            </button>
+            <button type="button" onclick="exportBlueprint('markdown')" class="btn-ghost px-2.5 py-1 text-xs border border-ds rounded bg-white text-slate-700 flex items-center gap-1 hover:bg-slate-50">
+              <i class="fa-regular fa-file-code text-blue-600"></i> Export Markdown
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab Body Content -->
+        <div class="flex-1 overflow-y-auto p-5 bg-white text-xs" id="blueprintTabContentArea">
+          <!-- Empty State -->
+          <div id="blueprintEmptyState" class="py-20 text-center text-slate-500 space-y-3">
+            <div class="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto text-2xl border border-teal-200">
+              <i class="fa-solid fa-compass-drafting"></i>
+            </div>
+            <h4 class="text-sm font-bold text-slate-800">Visual Product Reverse-Engineering Studio</h4>
+            <p class="text-xs text-slate-400 max-w-md mx-auto">Select a domain with captured screenshots and click "Deconstruct & Generate Blueprint" to infer complete full-stack architecture, diagrams, and API contracts.</p>
+          </div>
+
+          <!-- Loading State -->
+          <div id="blueprintLoading" class="py-24 text-center space-y-3 hidden">
+            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-teal-600"></i>
+            <p class="text-sm font-semibold text-slate-800">Synthesizing full-stack product blueprint from screenshots...</p>
+            <p class="text-xs text-slate-400">Deconstructing view types, mapping screen navigation, building ERD, and generating REST contracts</p>
+          </div>
+
+          <!-- Active Tabs View -->
+          <div id="blueprintContent" class="hidden space-y-6">
+            <!-- 1. Storyboard & Personas Tab -->
+            <div id="bpPanel_storyboard" role="tabpanel" class="space-y-5">
+              <div class="p-4 rounded-xl border border-ds bg-slate-50/60 space-y-3">
+                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-book-open text-teal-600"></i> Executive Product Overview
+                </h3>
+                <div id="bpStoryboardText" class="prose prose-xs max-w-none text-slate-700 leading-relaxed"></div>
+              </div>
+              <div class="space-y-3">
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Features & Capabilities Inventory</h4>
+                <div id="bpFeaturesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-2.5"></div>
+              </div>
+              <div class="space-y-3">
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Gherkin Use Case Specifications</h4>
+                <div id="bpUseCasesList" class="space-y-3"></div>
+              </div>
+            </div>
+
+            <!-- 2. Mermaid Diagrams Tab -->
+            <div id="bpPanel_diagrams" role="tabpanel" class="hidden space-y-6">
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <i class="fa-solid fa-route text-teal-600"></i> Information Architecture & Screen Navigation Flow
+                  </h4>
+                  <button type="button" onclick="copyBlueprintDiagram('nav')" class="text-[11px] text-teal-700 hover:underline">Copy Mermaid</button>
+                </div>
+                <div class="p-4 rounded-xl border border-ds bg-slate-50 overflow-x-auto text-center" id="bpNavDiagramContainer"></div>
+              </div>
+              <div class="space-y-2 pt-4 border-t border-ds">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <i class="fa-solid fa-database text-purple-600"></i> Inferred Database Schema (Entity-Relationship Diagram)
+                  </h4>
+                  <button type="button" onclick="copyBlueprintDiagram('erd')" class="text-[11px] text-purple-700 hover:underline">Copy Mermaid</button>
+                </div>
+                <div class="p-4 rounded-xl border border-ds bg-slate-50 overflow-x-auto text-center" id="bpErdDiagramContainer"></div>
+              </div>
+            </div>
+
+            <!-- 3. Frontend & Design Tokens Tab -->
+            <div id="bpPanel_frontend" role="tabpanel" class="hidden space-y-6">
+              <div class="space-y-3">
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Inferred Atomic Component Hierarchy</h4>
+                <div id="bpComponentsList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+              </div>
+              <div class="space-y-3 pt-4 border-t border-ds">
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Extracted Visual Design Tokens</h4>
+                <div id="bpDesignTokensContainer" class="p-4 rounded-xl border border-ds bg-slate-900 text-slate-100 font-mono text-[11px] overflow-x-auto"></div>
+              </div>
+            </div>
+
+            <!-- 4. Backend APIs Tab -->
+            <div id="bpPanel_backend" role="tabpanel" class="hidden space-y-4">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Inferred REST API Contracts</h4>
+                <span class="text-[11px] font-mono text-slate-500">OpenAPI 3.1 compatible</span>
+              </div>
+              <div id="bpApiEndpointsList" class="space-y-3"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-3 border-t border-ds bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <span>Non-invasive visual reverse-engineering engine</span>
+          <button type="button" onclick="closeBlueprintModal()" class="btn-ghost px-4 py-1.5 font-semibold text-slate-700">Close</button>
+        </div>
+      </div>
+    </div>
+
     <!-- GLOBAL FOOTER -->
     <footer class="mt-14 pt-6 pb-6 footer-bar text-center text-xs space-y-3">
       <div class="flex items-center justify-center gap-2.5">
@@ -1825,7 +2904,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     let modalAiTimer = null;
     let askTimer = null;
 
-    const MODAL_IDS = ['chromaStoreModal', 'previewModal', 'dossierModal', 'deleteConfirmModal', 'customRpaStepModal'];
+    const MODAL_IDS = ['blueprintModal', 'competitorModal', 'elementPickerModal', 'diffModal', 'schedulesModal', 'themeStudioModal', 'chromaStoreModal', 'previewModal', 'dossierModal', 'deleteConfirmModal', 'customRpaStepModal'];
 
     function syncBodyScrollLock() {
       const anyOpen = MODAL_IDS.some((id) => {
@@ -1836,11 +2915,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     function closeTopModal() {
-      const order = ['customRpaStepModal', 'deleteConfirmModal', 'chromaStoreModal', 'dossierModal', 'previewModal'];
+      const order = ['blueprintModal', 'competitorModal', 'elementPickerModal', 'diffModal', 'schedulesModal', 'themeStudioModal', 'customRpaStepModal', 'deleteConfirmModal', 'chromaStoreModal', 'dossierModal', 'previewModal'];
       for (const id of order) {
         const el = document.getElementById(id);
         if (el && !el.classList.contains('hidden')) {
-          if (id === 'previewModal') closePreview();
+          if (id === 'blueprintModal') closeBlueprintModal();
+          else if (id === 'competitorModal') closeCompetitorModal();
+          else if (id === 'elementPickerModal') closeElementPicker();
+          else if (id === 'diffModal') closeDiffModal();
+          else if (id === 'schedulesModal') closeSchedulesModal();
+          else if (id === 'themeStudioModal') closeThemeStudioModal();
+          else if (id === 'previewModal') closePreview();
           else if (id === 'dossierModal') closeDossierModal();
           else if (id === 'deleteConfirmModal') closeDeleteConfirmModal();
           else if (id === 'customRpaStepModal') closeCustomRpaStepModal();
@@ -1850,10 +2935,1609 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }
     }
 
+    // -------------------------------------------------------------------------
+    // THEME & DESIGN SYSTEM STUDIO ENGINE
+    // -------------------------------------------------------------------------
+    const ETHIC_THEMES = __THEMES_JSON__;
+    let activeStudioTab = 'presets';
+    let currentActiveThemeId = ETHIC_THEMES.defaultThemeId;
+
+    const KEY_COLOR_TOKENS = [
+      { key: '--ds-primary', label: 'Primary Accent', desc: 'Main highlights, branding, active states' },
+      { key: '--ds-primary-container', label: 'Primary Container (CTA)', desc: 'Primary buttons and selected tab fill' },
+      { key: '--ds-secondary', label: 'Secondary Accent', desc: 'Subtle links, export badges, indicators' },
+      { key: '--ds-bg', label: 'Background Canvas', desc: 'App-shell viewport background' },
+      { key: '--ds-surface', label: 'Surface Panels', desc: 'Glass cards and component surfaces' },
+      { key: '--ds-border', label: 'Borders & Outlines', desc: 'Card borders, dividers, inputs' },
+      { key: '--ds-on-surface', label: 'Primary Text', desc: 'Headings, table text, high-contrast labels' },
+      { key: '--ds-on-surface-variant', label: 'Muted Text', desc: 'Secondary notes, helper text' },
+      { key: '--ds-error', label: 'Error / Destructive', desc: 'Delete buttons, error banners' }
+    ];
+
+    function openThemeStudioModal() {
+      const modal = document.getElementById('themeStudioModal');
+      const btn = document.getElementById('headerThemeBtn');
+      modal.classList.remove('hidden');
+      if (btn) btn.setAttribute('aria-expanded', 'true');
+      syncBodyScrollLock();
+      renderThemeStudioUI();
+      const title = document.getElementById('themeStudioTitle');
+      if (title) title.focus();
+    }
+
+    function closeThemeStudioModal() {
+      const modal = document.getElementById('themeStudioModal');
+      const btn = document.getElementById('headerThemeBtn');
+      modal.classList.add('hidden');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'false');
+        btn.focus();
+      }
+      syncBodyScrollLock();
+    }
+
+    function switchStudioTab(tab) {
+      activeStudioTab = tab;
+      const tabs = ['presets', 'colors', 'typography', 'sandbox'];
+      for (const t of tabs) {
+        const btn = document.getElementById(`studioTab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
+        const pane = document.getElementById(`studioTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        const isActive = t === tab;
+        if (btn) {
+          btn.className = isActive
+            ? 'px-3 py-1.5 rounded-lg bg-ds-surface-low text-ds-primary border border-ds flex items-center gap-1.5 transition'
+            : 'px-3 py-1.5 rounded-lg text-ds-muted hover:text-[#1c1b1b] flex items-center gap-1.5 transition';
+        }
+        if (pane) {
+          pane.classList.toggle('hidden', !isActive);
+        }
+      }
+    }
+
+    function renderThemeStudioUI() {
+      try {
+        const saved = localStorage.getItem('ethic_user_theme');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) currentActiveThemeId = parsed.id;
+        }
+      } catch (e) {}
+
+      renderThemePresets();
+      renderColorTokens();
+      renderFontPairings();
+      updateThemeBadges();
+    }
+
+    function updateThemeBadges() {
+      const activeObj = ETHIC_THEMES.themes[currentActiveThemeId];
+      const displayName = activeObj ? activeObj.name.split(' (')[0] : 'Custom';
+      const badge = document.getElementById('studioActiveBadge');
+      const pill = document.getElementById('activeThemePill');
+      if (badge) badge.innerText = displayName;
+      if (pill) pill.innerText = displayName;
+    }
+
+    function renderThemePresets() {
+      const grid = document.getElementById('themePresetsGrid');
+      if (!grid) return;
+      const themes = Object.values(ETHIC_THEMES.themes);
+      grid.innerHTML = themes.map(th => {
+        const isCurrent = th.id === currentActiveThemeId;
+        const tokens = th.tokens || {};
+        const pColor = tokens['--ds-primary'] || '#536600';
+        const pContainer = tokens['--ds-primary-container'] || '#d4ff00';
+        const bgColor = tokens['--ds-bg'] || '#fcf8f8';
+        const borderColor = tokens['--ds-border'] || '#e5e2e1';
+
+        return `
+          <div class="p-4 rounded-xl border ${isCurrent ? 'border-purple-600 ring-2 ring-purple-100 bg-purple-50/20' : 'border-ds bg-white'} flex flex-col justify-between gap-3 shadow-xs hover:border-slate-400 transition cursor-pointer" onclick="applyThemePreset('${escapeHtml(th.id)}')">
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-xs text-[#1c1b1b]">${escapeHtml(th.name)}</span>
+                <span class="px-1.5 py-0.5 text-[9px] font-mono uppercase rounded ${th.category === 'dark' ? 'bg-slate-900 text-slate-100' : 'bg-slate-100 text-slate-700'}">${escapeHtml(th.category)}</span>
+              </div>
+              <p class="text-[11px] text-ds-muted leading-tight">${escapeHtml(th.description)}</p>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-ds">
+              <div class="flex items-center gap-1.5">
+                <span class="w-4 h-4 rounded-full border border-black/10 shadow-xs" style="background-color: ${pColor};" title="Primary: ${pColor}"></span>
+                <span class="w-4 h-4 rounded-full border border-black/10 shadow-xs" style="background-color: ${pContainer};" title="CTA Fill: ${pContainer}"></span>
+                <span class="w-4 h-4 rounded-full border border-black/10 shadow-xs" style="background-color: ${bgColor};" title="Background: ${bgColor}"></span>
+                <span class="w-4 h-4 rounded-full border border-black/10 shadow-xs" style="background-color: ${borderColor};" title="Border: ${borderColor}"></span>
+              </div>
+              ${isCurrent ? '<span class="text-[10px] font-mono font-bold text-purple-700 flex items-center gap-1"><i class="fa-solid fa-check"></i> ACTIVE</span>' : '<button type="button" class="btn-ghost px-2.5 py-1 text-[10px]">Select</button>'}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function applyThemePreset(themeId) {
+      const th = ETHIC_THEMES.themes[themeId];
+      if (!th) return;
+      currentActiveThemeId = themeId;
+      const root = document.documentElement;
+
+      for (const [k, v] of Object.entries(th.tokens || {})) {
+        root.style.setProperty(k, v);
+      }
+
+      const fp = ETHIC_THEMES.fontPairings[th.font_pairing || 'default'];
+      if (fp) {
+        root.style.setProperty('--ds-font-heading', fp.heading);
+        root.style.setProperty('--ds-font-sans', fp.sans);
+        root.style.setProperty('--ds-font-mono', fp.mono);
+      }
+
+      try {
+        localStorage.setItem('ethic_user_theme', JSON.stringify({
+          id: th.id,
+          name: th.name,
+          tokens: th.tokens,
+          fontPairingId: th.font_pairing,
+          fonts: fp ? { heading: fp.heading, sans: fp.sans, mono: fp.mono } : null
+        }));
+      } catch (e) {}
+
+      updateThemeBadges();
+      renderThemePresets();
+      renderColorTokens();
+      renderFontPairings();
+      showToast('Applied ' + th.name, 'success');
+    }
+
+    function rgbToHex(val) {
+      if (!val) return '#ffffff';
+      val = val.trim();
+      if (val.startsWith('#')) {
+        return val.length === 4
+          ? '#' + val[1] + val[1] + val[2] + val[2] + val[3] + val[3]
+          : val.slice(0, 7);
+      }
+      const match = val.match(/^rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
+      if (match) {
+        const r = parseInt(match[1], 10).toString(16).padStart(2, '0');
+        const g = parseInt(match[2], 10).toString(16).padStart(2, '0');
+        const b = parseInt(match[3], 10).toString(16).padStart(2, '0');
+        return '#' + r + g + b;
+      }
+      return '#888888';
+    }
+
+    function renderColorTokens() {
+      const grid = document.getElementById('colorTokensGrid');
+      if (!grid) return;
+      const rootStyle = getComputedStyle(document.documentElement);
+
+      grid.innerHTML = KEY_COLOR_TOKENS.map(item => {
+        const currentVal = rootStyle.getPropertyValue(item.key).trim() || '#ffffff';
+        const hexVal = rgbToHex(currentVal);
+        const safeId = item.key.replace(/[^a-zA-Z0-9]/g, '_');
+
+        return `
+          <div class="p-3 bg-white border border-ds rounded-xl space-y-2 shadow-xs">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-xs font-bold text-[#1c1b1b]">${escapeHtml(item.label)}</div>
+                <div class="text-[10px] text-ds-muted font-mono">${escapeHtml(item.key)}</div>
+              </div>
+              <input type="color" id="picker_${safeId}" value="${hexVal}"
+                     oninput="onTokenColorInput('${item.key}', this.value, '${safeId}')"
+                     class="w-7 h-7 rounded border border-ds cursor-pointer p-0 bg-transparent">
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="text" id="hex_${safeId}" value="${hexVal}"
+                     onchange="onTokenHexInput('${item.key}', this.value, '${safeId}')"
+                     class="font-mono text-xs px-2 py-1 border border-ds rounded w-full bg-[#fafafa]">
+            </div>
+            <p class="text-[10px] text-ds-muted">${escapeHtml(item.desc)}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function onTokenColorInput(tokenKey, hexVal, safeId) {
+      document.documentElement.style.setProperty(tokenKey, hexVal);
+      const textInput = document.getElementById('hex_' + safeId);
+      if (textInput) textInput.value = hexVal;
+      saveCustomThemeState(tokenKey, hexVal);
+    }
+
+    function onTokenHexInput(tokenKey, hexVal, safeId) {
+      if (!hexVal.startsWith('#')) hexVal = '#' + hexVal;
+      document.documentElement.style.setProperty(tokenKey, hexVal);
+      const pickerInput = document.getElementById('picker_' + safeId);
+      if (pickerInput) pickerInput.value = hexVal;
+      saveCustomThemeState(tokenKey, hexVal);
+    }
+
+    function saveCustomThemeState(tokenKey, tokenVal) {
+      currentActiveThemeId = 'custom';
+      updateThemeBadges();
+      try {
+        let saved = localStorage.getItem('ethic_user_theme');
+        let data = saved ? JSON.parse(saved) : { id: 'custom', name: 'Custom Theme', tokens: {} };
+        data.id = 'custom';
+        data.name = 'Custom Theme';
+        if (!data.tokens) data.tokens = {};
+        data.tokens[tokenKey] = tokenVal;
+        localStorage.setItem('ethic_user_theme', JSON.stringify(data));
+      } catch (e) {}
+    }
+
+    function renderFontPairings() {
+      const container = document.getElementById('fontPairingsList');
+      if (!container) return;
+      const pairings = Object.entries(ETHIC_THEMES.fontPairings);
+
+      container.innerHTML = pairings.map(([pId, p]) => {
+        return `
+          <div class="p-3.5 bg-white border border-ds rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div class="space-y-1">
+              <div class="font-bold text-xs text-[#1c1b1b]">${escapeHtml(p.name)}</div>
+              <div class="flex flex-wrap items-center gap-3 text-[11px] text-ds-muted">
+                <span>Headings: <strong class="text-slate-800" style="font-family: ${p.heading};">Sample Heading</strong></span>
+                <span>Body: <strong class="text-slate-800" style="font-family: ${p.sans};">Sample Body</strong></span>
+                <span>Code: <strong class="text-slate-800 font-mono" style="font-family: ${p.mono};">0x2A // ETHIC</strong></span>
+              </div>
+            </div>
+            <button type="button" onclick="applyFontPairing('${escapeHtml(pId)}')" class="btn-ghost px-3 py-1.5 text-xs text-purple-700 font-semibold hover:border-purple-300 shrink-0">
+              Apply Typography
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function applyFontPairing(pairingId) {
+      const fp = ETHIC_THEMES.fontPairings[pairingId];
+      if (!fp) return;
+      const root = document.documentElement;
+      root.style.setProperty('--ds-font-heading', fp.heading);
+      root.style.setProperty('--ds-font-sans', fp.sans);
+      root.style.setProperty('--ds-font-mono', fp.mono);
+
+      try {
+        let saved = localStorage.getItem('ethic_user_theme');
+        let data = saved ? JSON.parse(saved) : { id: currentActiveThemeId, tokens: {} };
+        data.fontPairingId = pairingId;
+        data.fonts = { heading: fp.heading, sans: fp.sans, mono: fp.mono };
+        localStorage.setItem('ethic_user_theme', JSON.stringify(data));
+      } catch (e) {}
+
+      showToast('Typography updated: ' + fp.name, 'success');
+    }
+
+    function copyCssVariables() {
+      const root = document.documentElement;
+      const style = getComputedStyle(root);
+      const lines = [':root {'];
+
+      lines.push(`  --ds-font-heading: ${style.getPropertyValue('--ds-font-heading').trim() || "'Space Grotesk', sans-serif"};`);
+      lines.push(`  --ds-font-sans: ${style.getPropertyValue('--ds-font-sans').trim() || "'Plus Jakarta Sans', sans-serif"};`);
+      lines.push(`  --ds-font-mono: ${style.getPropertyValue('--ds-font-mono').trim() || "'Space Mono', monospace"};`);
+
+      const allTokens = [
+        '--ds-bg', '--ds-surface', '--ds-card-bg', '--ds-surface-container',
+        '--ds-surface-container-low', '--ds-surface-container-high', '--ds-surface-container-highest',
+        '--ds-on-surface', '--ds-on-surface-variant', '--ds-outline',
+        '--ds-primary', '--ds-primary-container', '--ds-on-primary-container',
+        '--ds-secondary', '--ds-secondary-container', '--ds-tertiary',
+        '--ds-error', '--ds-error-container', '--ds-border', '--ds-shadow', '--ds-radius'
+      ];
+
+      for (const t of allTokens) {
+        const val = style.getPropertyValue(t).trim();
+        if (val) lines.push(`  ${t}: ${val};`);
+      }
+      lines.push('}');
+      const cssText = lines.join('\\n');
+
+      navigator.clipboard.writeText(cssText).then(() => {
+        showToast('Copied CSS :root variables to clipboard!', 'success');
+      }).catch(() => {
+        prompt('Copy your CSS :root block:', cssText);
+      });
+    }
+
+    function copyThemeJson() {
+      const root = document.documentElement;
+      const style = getComputedStyle(root);
+      const tokens = {};
+
+      const allTokens = [
+        '--ds-bg', '--ds-surface', '--ds-card-bg', '--ds-surface-container',
+        '--ds-surface-container-low', '--ds-surface-container-high', '--ds-surface-container-highest',
+        '--ds-on-surface', '--ds-on-surface-variant', '--ds-outline',
+        '--ds-primary', '--ds-primary-container', '--ds-on-primary-container',
+        '--ds-secondary', '--ds-secondary-container', '--ds-tertiary',
+        '--ds-error', '--ds-error-container', '--ds-border', '--ds-shadow', '--ds-radius'
+      ];
+
+      for (const t of allTokens) {
+        const val = style.getPropertyValue(t).trim();
+        if (val) tokens[t] = val;
+      }
+
+      const exportObj = {
+        id: currentActiveThemeId,
+        name: 'Custom Theme',
+        category: 'light',
+        font_pairing: 'default',
+        tokens: tokens
+      };
+
+      const jsonStr = JSON.stringify(exportObj, null, 2);
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        showToast('Copied Theme JSON to clipboard! Ready to paste into theme.py', 'success');
+      }).catch(() => {
+        prompt('Copy your Theme JSON:', jsonStr);
+      });
+    }
+
+    function downloadThemeJson() {
+      const root = document.documentElement;
+      const style = getComputedStyle(root);
+      const tokens = {};
+      const allTokens = [
+        '--ds-bg', '--ds-surface', '--ds-card-bg', '--ds-surface-container',
+        '--ds-surface-container-low', '--ds-surface-container-high', '--ds-surface-container-highest',
+        '--ds-on-surface', '--ds-on-surface-variant', '--ds-outline',
+        '--ds-primary', '--ds-primary-container', '--ds-on-primary-container',
+        '--ds-secondary', '--ds-secondary-container', '--ds-tertiary',
+        '--ds-error', '--ds-error-container', '--ds-border', '--ds-shadow', '--ds-radius'
+      ];
+
+      for (const t of allTokens) {
+        const val = style.getPropertyValue(t).trim();
+        if (val) tokens[t] = val;
+      }
+
+      const exportObj = {
+        id: currentActiveThemeId,
+        name: 'Custom Theme',
+        category: 'light',
+        tokens: tokens
+      };
+
+      const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ethic_theme.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Downloaded ethic_theme.json', 'success');
+    }
+
+    function promptImportThemeJson() {
+      const raw = prompt('Paste your Theme JSON (must contain a "tokens" object):');
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.tokens) throw new Error('Invalid theme format. Missing "tokens" dictionary.');
+        const root = document.documentElement;
+        for (const [k, v] of Object.entries(parsed.tokens)) {
+          root.style.setProperty(k, v);
+        }
+        localStorage.setItem('ethic_user_theme', JSON.stringify(parsed));
+        currentActiveThemeId = parsed.id || 'custom';
+        updateThemeBadges();
+        renderColorTokens();
+        renderThemePresets();
+        showToast('Theme imported and applied successfully!', 'success');
+      } catch (err) {
+        alert('Could not import theme: ' + err.message);
+      }
+    }
+
+    function resetThemeToDefault() {
+      try {
+        localStorage.removeItem('ethic_user_theme');
+      } catch (e) {}
+      applyThemePreset(ETHIC_THEMES.defaultThemeId);
+      showToast('Reset theme to factory default', 'info');
+    }
+
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[ch]));
+    }
+
+    // -------------------------------------------------------------------------
+    // AUTONOMOUS SCHEDULES & DIFF ENGINE
+    // -------------------------------------------------------------------------
+    let schedulesCache = [];
+
+    function openSchedulesModal() {
+      const modal = document.getElementById('schedulesModal');
+      const badge = document.getElementById('headerSchedulesBtn');
+      modal.classList.remove('hidden');
+      if (badge) badge.setAttribute('aria-expanded', 'true');
+      syncBodyScrollLock();
+      loadSchedulesTable();
+    }
+
+    function closeSchedulesModal() {
+      const modal = document.getElementById('schedulesModal');
+      const badge = document.getElementById('headerSchedulesBtn');
+      modal.classList.add('hidden');
+      if (badge) {
+        badge.setAttribute('aria-expanded', 'false');
+        badge.focus();
+      }
+      syncBodyScrollLock();
+    }
+
+    async function updateSchedulesBadgeCount() {
+      try {
+        const res = await fetch('/api/v1/schedules');
+        if (!res.ok) return;
+        const data = await res.json();
+        const activeCount = data.filter((j) => j.status === 'active').length;
+        const badge = document.getElementById('headerSchedulesCount');
+        if (badge) badge.innerText = String(activeCount);
+      } catch (e) {}
+    }
+
+    async function loadSchedulesTable() {
+      const tbody = document.getElementById('schedulesTableBody');
+      const countEl = document.getElementById('schedulesTableCount');
+      if (!tbody) return;
+
+      tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-xs text-ds-muted"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading monitors...</td></tr>';
+
+      try {
+        const res = await fetch('/api/v1/schedules');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const jobs = await res.json();
+        schedulesCache = jobs;
+
+        if (countEl) countEl.innerText = String(jobs.length);
+        updateSchedulesBadgeCount();
+
+        if (!jobs || jobs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-ds-muted font-mono">No active monitors configured yet. Add a target URL above to begin 24/7 autonomous monitoring.</td></tr>';
+          return;
+        }
+
+        let rowsHtml = '';
+        for (const job of jobs) {
+          const isPaused = job.status === 'paused';
+          const isRunning = job.status === 'running';
+
+          let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>';
+          if (isPaused) {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200">Paused</span>';
+          } else if (isRunning) {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-100 text-blue-800 border border-blue-200"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Running</span>';
+          } else if (job.last_status === 'changed') {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-100 text-purple-800 border border-purple-200">⚡ Changed</span>';
+          } else if (job.status === 'error') {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200">Error</span>';
+          }
+
+          const lastChecked = job.last_run_at ? new Date(job.last_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Pending';
+          const nextRun = job.next_run_at ? new Date(job.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Soon';
+
+          let diffBtn = '';
+          if (job.last_raw_diff) {
+            diffBtn = `<button type="button" onclick="inspectScheduleDiff('${escapeHtml(job.id)}')" class="px-2 py-1 text-[11px] font-mono font-bold rounded border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 transition" title="Inspect diff"><i class="fa-solid fa-code-compare mr-1"></i>Diff</button>`;
+          }
+
+          const toggleAction = isPaused ? 'Resume' : 'Pause';
+          const toggleIcon = isPaused ? 'fa-play' : 'fa-pause';
+
+          rowsHtml += `
+            <tr class="hover:bg-slate-50/80 transition">
+              <td class="p-3">
+                <div class="font-bold text-slate-900">${escapeHtml(job.name)}</div>
+                <div class="font-mono text-[11px] text-slate-500 truncate max-w-xs" title="${escapeHtml(job.url)}">${escapeHtml(job.url)}</div>
+              </td>
+              <td class="p-3 font-mono text-[11px] font-semibold text-slate-700">
+                ${escapeHtml(job.interval)} <span class="text-slate-400 font-normal">(${escapeHtml(job.strategy)})</span>
+              </td>
+              <td class="p-3 font-mono text-[11px] text-slate-600">${escapeHtml(lastChecked)}</td>
+              <td class="p-3 font-mono text-[11px] text-slate-600">${escapeHtml(nextRun)}</td>
+              <td class="p-3">
+                <div class="flex items-center gap-1.5">${statusBadge}</div>
+                <div class="text-[10px] text-slate-500 mt-1 truncate max-w-[200px]" title="${escapeHtml(job.last_diff_summary || '')}">${escapeHtml(job.last_diff_summary || 'No changes')}</div>
+              </td>
+              <td class="p-3 text-right">
+                <div class="inline-flex items-center gap-1">
+                  ${diffBtn}
+                  <button type="button" onclick="runScheduleNow('${escapeHtml(job.id)}')" class="px-2 py-1 text-[11px] font-mono rounded border border-ds hover:bg-slate-100 text-slate-700 transition" title="Run now">
+                    <i class="fa-solid fa-bolt mr-1 text-amber-600"></i>Run
+                  </button>
+                  <button type="button" onclick="toggleScheduleActive('${escapeHtml(job.id)}')" class="px-2 py-1 text-[11px] font-mono rounded border border-ds hover:bg-slate-100 text-slate-700 transition" title="${toggleAction}">
+                    <i class="fa-solid ${toggleIcon}"></i>
+                  </button>
+                  <button type="button" onclick="deleteScheduleJob('${escapeHtml(job.id)}')" class="px-2 py-1 text-[11px] font-mono rounded border border-rose-200 hover:bg-rose-50 text-rose-600 transition" title="Delete">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }
+        tbody.innerHTML = rowsHtml;
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-xs text-rose-600 font-mono">Failed to load monitors: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    async function handleCreateSchedule(event) {
+      event.preventDefault();
+      const urlInput = document.getElementById('schedUrlInput');
+      const nameInput = document.getElementById('schedNameInput');
+      const intervalInput = document.getElementById('schedIntervalInput');
+      const webhookInput = document.getElementById('schedWebhookInput');
+      const strategyInput = document.getElementById('schedStrategyInput');
+      const btn = document.getElementById('createScheduleBtn');
+
+      const url = urlInput ? urlInput.value.trim() : '';
+      if (!url) return;
+
+      const payload = {
+        url: url,
+        name: nameInput && nameInput.value.trim() ? nameInput.value.trim() : null,
+        interval: intervalInput ? intervalInput.value : '24h',
+        strategy: strategyInput ? strategyInput.value : 'auto',
+        webhook_url: webhookInput && webhookInput.value.trim() ? webhookInput.value.trim() : null,
+      };
+
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/v1/schedules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Failed to create schedule');
+        }
+        showToast('Autonomous monitor registered successfully!', 'success');
+        if (urlInput) urlInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (webhookInput) webhookInput.value = '';
+        loadSchedulesTable();
+      } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function runScheduleNow(jobId) {
+      showToast('Executing monitor run...', 'info');
+      try {
+        const res = await fetch(`/api/v1/schedules/${encodeURIComponent(jobId)}/run`, { method: 'POST' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        showToast('Monitor execution complete: ' + (data.job.last_status || 'done'), 'success');
+        loadSchedulesTable();
+        if (data.diff && data.diff.has_changed) {
+          openDiffModal(data.diff, data.job.name, data.job.url);
+        }
+      } catch (err) {
+        showToast('Run error: ' + err.message, 'error');
+      }
+    }
+
+    async function toggleScheduleActive(jobId) {
+      try {
+        const res = await fetch(`/api/v1/schedules/${encodeURIComponent(jobId)}/toggle`, { method: 'POST' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        loadSchedulesTable();
+      } catch (err) {
+        showToast('Toggle error: ' + err.message, 'error');
+      }
+    }
+
+    async function deleteScheduleJob(jobId) {
+      if (!confirm('Are you sure you want to delete this monitor?')) return;
+      try {
+        const res = await fetch(`/api/v1/schedules/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        showToast('Monitor deleted', 'info');
+        loadSchedulesTable();
+      } catch (err) {
+        showToast('Delete error: ' + err.message, 'error');
+      }
+    }
+
+    function inspectScheduleDiff(jobId) {
+      const job = schedulesCache.find((j) => j.id === jobId);
+      if (!job) return;
+
+      const diffObj = {
+        has_changed: true,
+        similarity_ratio: job.last_similarity_ratio || 1.0,
+        added_lines_count: 0,
+        removed_lines_count: 0,
+        summary: job.last_diff_summary || 'Changes recorded',
+        html_diff: job.last_raw_diff ? escapeHtml(job.last_raw_diff) : '<div class="text-slate-400 p-4">No raw diff recorded.</div>',
+      };
+      openDiffModal(diffObj, job.name, job.url);
+    }
+
+    function openDiffModal(diff, title, url) {
+      const modal = document.getElementById('diffModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      syncBodyScrollLock();
+
+      const subtitle = document.getElementById('diffSubtitle');
+      if (subtitle) subtitle.innerText = `${title || 'Target'} (${url || ''})`;
+
+      const simBadge = document.getElementById('diffSimilarityBadge');
+      if (simBadge) {
+        const pct = Math.round((diff.similarity_ratio || 1.0) * 100);
+        simBadge.innerText = `${pct}% Match`;
+        simBadge.className = pct < 90 ?
+          'px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200' :
+          'px-2 py-0.5 text-[10px] font-mono font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+
+      const addedEl = document.getElementById('diffAddedCount');
+      if (addedEl) addedEl.innerText = String(diff.added_lines_count || 0);
+
+      const removedEl = document.getElementById('diffRemovedCount');
+      if (removedEl) removedEl.innerText = String(diff.removed_lines_count || 0);
+
+      const summaryEl = document.getElementById('diffSummaryText');
+      if (summaryEl) summaryEl.innerText = diff.summary || 'Summary unavailable';
+
+      const container = document.getElementById('diffHtmlContainer');
+      if (container) {
+        container.innerHTML = diff.html_diff || '<div class="text-slate-400 p-4">No unified diff lines to display.</div>';
+      }
+    }
+
+    function closeDiffModal() {
+      const modal = document.getElementById('diffModal');
+      if (modal) modal.classList.add('hidden');
+      syncBodyScrollLock();
+    }
+
+    // -------------------------------------------------------------------------
+    // INTERACTIVE POINT-AND-CLICK ELEMENT PICKER CONTROLLER
+    // -------------------------------------------------------------------------
+    let currentPickerTarget = 'scraper';
+    let currentPickerUrl = '';
+
+    function openElementPicker(url, target) {
+      currentPickerTarget = target || 'scraper';
+      let resolvedUrl = url;
+      if (!resolvedUrl) {
+        const scrapeInput = document.getElementById('scrapeUrl');
+        resolvedUrl = scrapeInput ? scrapeInput.value.trim() : '';
+      }
+      if (!resolvedUrl || !resolvedUrl.startsWith('http')) {
+        showToast('Please enter a valid HTTP/HTTPS URL first', 'error');
+        return;
+      }
+      currentPickerUrl = resolvedUrl;
+      const urlText = document.getElementById('pickerTargetUrlText');
+      if (urlText) urlText.textContent = resolvedUrl;
+
+      const selInput = document.getElementById('pickerSelectorInput');
+      if (selInput) selInput.value = '';
+
+      const tagBadge = document.getElementById('pickerTagBadge');
+      if (tagBadge) tagBadge.classList.add('hidden');
+
+      const matchesBadge = document.getElementById('pickerMatchesBadge');
+      if (matchesBadge) matchesBadge.classList.add('hidden');
+
+      const modal = document.getElementById('elementPickerModal');
+      if (modal) modal.classList.remove('hidden');
+      syncBodyScrollLock();
+
+      loadPickerIframe(resolvedUrl);
+    }
+
+    function openElementPickerFromRpa() {
+      const targetInput = document.getElementById('targetUrl');
+      const scrapeInput = document.getElementById('scrapeUrl');
+      const url = (targetInput && targetInput.value.trim()) ? targetInput.value.trim() : (scrapeInput ? scrapeInput.value.trim() : '');
+      openElementPicker(url, 'rpa');
+    }
+
+    function loadPickerIframe(url) {
+      const loader = document.getElementById('pickerLoading');
+      const iframe = document.getElementById('pickerSandboxIframe');
+      if (loader) loader.classList.remove('hidden');
+      if (iframe) {
+        iframe.src = '/api/v1/elements/sandbox?url=' + encodeURIComponent(url);
+        iframe.onload = () => {
+          if (loader) loader.classList.add('hidden');
+        };
+      }
+    }
+
+    function refreshPickerIframe() {
+      if (currentPickerUrl) {
+        loadPickerIframe(currentPickerUrl);
+      }
+    }
+
+    function closeElementPicker() {
+      const modal = document.getElementById('elementPickerModal');
+      if (modal) modal.classList.add('hidden');
+      const iframe = document.getElementById('pickerSandboxIframe');
+      if (iframe) iframe.src = 'about:blank';
+      syncBodyScrollLock();
+    }
+
+    function copyPickerSelector() {
+      const input = document.getElementById('pickerSelectorInput');
+      const val = input ? input.value : '';
+      if (!val) {
+        showToast('No selector picked yet', 'warning');
+        return;
+      }
+      navigator.clipboard.writeText(val);
+      showToast('Selector copied to clipboard: ' + val, 'success');
+    }
+
+    function applyPickerSelector() {
+      const input = document.getElementById('pickerSelectorInput');
+      const val = input ? input.value : '';
+      if (!val) {
+        showToast('Please select an element first', 'warning');
+        return;
+      }
+      if (currentPickerTarget === 'rpa') {
+        const rpaInput = document.getElementById('rpaStepSelector');
+        if (rpaInput) rpaInput.value = val;
+        showToast('Applied selector to RPA Step: ' + val, 'success');
+      } else {
+        const customPrompt = document.getElementById('customPrompt');
+        if (customPrompt) {
+          customPrompt.value = (customPrompt.value ? customPrompt.value + '\\nTarget CSS: ' : 'Target CSS: ') + val;
+        }
+        navigator.clipboard.writeText(val);
+        showToast('Selector copied and set: ' + val, 'success');
+      }
+      closeElementPicker();
+    }
+
+    window.addEventListener('message', (event) => {
+      if (event.data && event.data.type === 'ELEMENT_PICKED') {
+        const { selector, tagName, innerText, matchCount } = event.data;
+        const input = document.getElementById('pickerSelectorInput');
+        if (input) input.value = selector || '';
+
+        const tagBadge = document.getElementById('pickerTagBadge');
+        if (tagBadge && tagName) {
+          tagBadge.textContent = tagName;
+          tagBadge.classList.remove('hidden');
+        }
+
+        const matchBadge = document.getElementById('pickerMatchesBadge');
+        if (matchBadge) {
+          matchBadge.textContent = matchCount === 1 ? '1 unique match' : (matchCount + ' matches');
+          matchBadge.classList.remove('hidden');
+        }
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // COMPETITIVE BENCHMARKING & TECH PROFILING CONTROLLER
+    // -------------------------------------------------------------------------
+    let lastBenchmarkDomains = [];
+
+    function openCompetitorModal(preselectedDomain) {
+      const modal = document.getElementById('competitorModal');
+      const badge = document.getElementById('headerBenchmarkBtn');
+      if (modal) modal.classList.remove('hidden');
+      if (badge) badge.setAttribute('aria-expanded', 'true');
+      syncBodyScrollLock();
+      loadBenchmarkDomainCheckboxes(preselectedDomain);
+    }
+
+    function closeCompetitorModal() {
+      const modal = document.getElementById('competitorModal');
+      const badge = document.getElementById('headerBenchmarkBtn');
+      if (modal) modal.classList.add('hidden');
+      if (badge) {
+        badge.setAttribute('aria-expanded', 'false');
+        badge.focus();
+      }
+      syncBodyScrollLock();
+    }
+
+    async function loadBenchmarkDomainCheckboxes(preselectedDomain) {
+      const container = document.getElementById('benchmarkDomainList');
+      if (!container) return;
+
+      try {
+        let domains = storedDomainsList;
+        if (!domains || domains.length === 0) {
+          const res = await fetch('/api/v1/domains');
+          if (res.ok) {
+            domains = await res.json();
+            storedDomainsList = domains;
+          }
+        }
+
+        if (!domains || domains.length === 0) {
+          container.innerHTML = '<span class="text-xs text-slate-400 italic">No indexed domains found in ChromaDB. Crawl at least 2 websites first.</span>';
+          return;
+        }
+
+        let html = '';
+        domains.forEach((d) => {
+          const domName = typeof d === 'string' ? d : (d.domain || '');
+          if (!domName) return;
+          const isChecked = preselectedDomain && preselectedDomain.toLowerCase() === domName.toLowerCase();
+          html += `
+            <label class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-50 border border-ds text-xs font-mono cursor-pointer hover:bg-slate-100 select-none">
+              <input type="checkbox" name="benchmarkDomain" value="${escapeHtml(domName)}" ${isChecked ? 'checked' : ''} class="rounded text-amber-600 focus:ring-0">
+              <span class="text-slate-800 font-semibold">${escapeHtml(domName)}</span>
+            </label>
+          `;
+        });
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = `<span class="text-xs text-rose-500">Failed loading domains: ${err.message}</span>`;
+      }
+    }
+
+    async function runCompetitorBenchmark() {
+      const checkboxes = document.querySelectorAll('input[name="benchmarkDomain"]:checked');
+      const selected = Array.from(checkboxes).map((cb) => cb.value);
+
+      if (selected.length < 2) {
+        showToast('Please select at least 2 competitor domains to benchmark.', 'warning');
+        return;
+      }
+      if (selected.length > 5) {
+        showToast('Please select no more than 5 domains for side-by-side comparison.', 'warning');
+        return;
+      }
+
+      lastBenchmarkDomains = selected;
+      const focus = (document.getElementById('benchmarkFocusInput').value || '').trim();
+
+      const emptyState = document.getElementById('benchmarkEmptyState');
+      const loader = document.getElementById('benchmarkLoading');
+      const content = document.getElementById('benchmarkContent');
+      const btn = document.getElementById('btnRunBenchmark');
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (content) content.classList.add('hidden');
+      if (loader) loader.classList.remove('hidden');
+      if (btn) btn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/v1/competitors/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domains: selected,
+            custom_focus: focus || null,
+          }),
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'HTTP ' + resp.status }));
+          throw new Error(err.detail || 'Failed to benchmark competitors');
+        }
+
+        const data = await resp.json();
+
+        // Render model badge
+        const badge = document.getElementById('benchmarkModelBadge');
+        if (badge) badge.textContent = data.model_used || 'heuristic-synthesis';
+
+        // Render table
+        const tableContainer = document.getElementById('benchmarkTableContainer');
+        if (tableContainer) {
+          tableContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(data.comparison_table_md) : `<pre>${escapeHtml(data.comparison_table_md)}</pre>`;
+        }
+
+        // Render full report
+        const reportContainer = document.getElementById('benchmarkReportContainer');
+        if (reportContainer) {
+          reportContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(data.full_report_md) : `<pre>${escapeHtml(data.full_report_md)}</pre>`;
+        }
+
+        if (loader) loader.classList.add('hidden');
+        if (content) content.classList.remove('hidden');
+        showToast('Competitive benchmark generated successfully!', 'success');
+      } catch (err) {
+        if (loader) loader.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function exportCompetitorBenchmark(fmt) {
+      if (!lastBenchmarkDomains || lastBenchmarkDomains.length < 2) {
+        showToast('Run a benchmark first before exporting.', 'warning');
+        return;
+      }
+
+      const focus = (document.getElementById('benchmarkFocusInput').value || '').trim();
+      const format = fmt || 'pdf';
+
+      try {
+        showToast(`Preparing ${format.toUpperCase()} export...`, 'info');
+        const resp = await fetch('/api/v1/competitors/compare/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domains: lastBenchmarkDomains,
+            custom_focus: focus || null,
+            format: format,
+          }),
+        });
+
+        if (!resp.ok) throw new Error('Export failed: HTTP ' + resp.status);
+
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        const ext = format === 'markdown' ? 'md' : 'pdf';
+        a.download = `competitor_benchmark_${lastBenchmarkDomains.join('_vs_')}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        showToast(`${format.toUpperCase()} export downloaded!`, 'success');
+      } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // VISUAL PRODUCT BLUEPRINT & REVERSE-ENGINEERING CONTROLLER
+    // -------------------------------------------------------------------------
+    let currentBlueprintResult = null;
+    let currentBlueprintDomain = '';
+    let blueprintPendingFiles = [];
+
+    function toggleBlueprintUploadSection() {
+      const sec = document.getElementById('blueprintUploadSection');
+      if (!sec) return;
+      sec.classList.toggle('hidden');
+      if (!sec.classList.contains('hidden')) {
+        populateBlueprintUploadDomainSelect();
+      }
+    }
+
+    function populateBlueprintUploadDomainSelect() {
+      const mainSelect = document.getElementById('blueprintDomainSelect');
+      const upSelect = document.getElementById('blueprintUploadDomainSelect');
+      const badge = document.getElementById('blueprintUploadTargetBadge');
+      if (!upSelect) return;
+
+      const currentVal = (mainSelect && mainSelect.value) ? mainSelect.value : currentBlueprintDomain;
+      let opts = '';
+      let foundSelected = false;
+
+      if (mainSelect) {
+        for (let i = 0; i < mainSelect.options.length; i++) {
+          const opt = mainSelect.options[i];
+          if (opt.value) {
+            const isSel = (opt.value === currentVal);
+            if (isSel) foundSelected = true;
+            opts += `<option value="${escapeHtml(opt.value)}" ${isSel ? 'selected' : ''}>🌐 ${escapeHtml(opt.text)}</option>`;
+          }
+        }
+      }
+
+      opts += `<option value="__NEW__" ${!foundSelected ? 'selected' : ''}>➕ Create New Domain / Project...</option>`;
+      upSelect.innerHTML = opts;
+      onBlueprintUploadDomainSelectChange();
+    }
+
+    function onBlueprintUploadDomainSelectChange() {
+      const upSelect = document.getElementById('blueprintUploadDomainSelect');
+      const newInput = document.getElementById('blueprintUploadDomainInput');
+      const badge = document.getElementById('blueprintUploadTargetBadge');
+      if (!upSelect) return;
+
+      if (upSelect.value === '__NEW__') {
+        if (newInput) {
+          newInput.classList.remove('hidden');
+          newInput.focus();
+        }
+        if (badge) badge.textContent = (newInput && newInput.value.trim()) ? newInput.value.trim() : '(New Domain)';
+      } else {
+        if (newInput) newInput.classList.add('hidden');
+        if (badge) badge.textContent = upSelect.value;
+      }
+    }
+
+    function isImageFile(file) {
+      return !!file && (
+        file.type.startsWith('image/') ||
+        /\\.(png|jpe?g|webp)$/i.test(file.name)
+      );
+    }
+
+    function onBlueprintFileSelect(event) {
+      const files = Array.from(event.target.files || []).filter(isImageFile);
+      setBlueprintPendingFiles(files);
+    }
+
+    function onBlueprintFolderSelect(event) {
+      const files = Array.from(event.target.files || []).filter(isImageFile);
+      if (files.length > 0 && files[0].webkitRelativePath) {
+        const parts = files[0].webkitRelativePath.split('/');
+        if (parts.length > 1 && parts[0]) {
+          autoSuggestDomainIfNew(parts[0]);
+        }
+      }
+      setBlueprintPendingFiles(files);
+    }
+
+    function autoSuggestDomainIfNew(suggested) {
+      if (!suggested) return;
+      const clean = suggested.replace(/[^a-zA-Z0-9_\\-\\.]/g, '_').toLowerCase();
+      const upSelect = document.getElementById('blueprintUploadDomainSelect');
+      const newInput = document.getElementById('blueprintUploadDomainInput');
+      const badge = document.getElementById('blueprintUploadTargetBadge');
+
+      if (upSelect && upSelect.value === '__NEW__' && newInput) {
+        newInput.value = clean;
+        if (badge) badge.textContent = clean;
+      }
+    }
+
+    function getFileFromEntry(fileEntry) {
+      return new Promise((resolve) => {
+        fileEntry.file(resolve, () => resolve(null));
+      });
+    }
+
+    async function readDirectoryEntries(dirEntry) {
+      const dirReader = dirEntry.createReader();
+      const entries = await new Promise((resolve) => {
+        dirReader.readEntries(resolve, () => resolve([]));
+      });
+      const files = [];
+      for (const entry of entries) {
+        if (entry.isFile) {
+          const file = await getFileFromEntry(entry);
+          if (file && isImageFile(file)) files.push(file);
+        } else if (entry.isDirectory) {
+          const subFiles = await readDirectoryEntries(entry);
+          files.push(...subFiles);
+        }
+      }
+      return files;
+    }
+
+    async function handleBlueprintDrop(event) {
+      event.preventDefault();
+      const dropzone = document.getElementById('blueprintUploadDropzone');
+      if (dropzone) dropzone.classList.remove('border-teal-500', 'bg-teal-100/40');
+
+      const items = event.dataTransfer.items;
+      if (!items) {
+        const files = Array.from(event.dataTransfer.files || []).filter(isImageFile);
+        setBlueprintPendingFiles(files);
+        return;
+      }
+
+      const collectedFiles = [];
+      const entries = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+        if (entry) entries.push(entry);
+      }
+
+      for (const entry of entries) {
+        if (entry.isFile) {
+          const file = await getFileFromEntry(entry);
+          if (file && isImageFile(file)) collectedFiles.push(file);
+        } else if (entry.isDirectory) {
+          autoSuggestDomainIfNew(entry.name);
+          const dirFiles = await readDirectoryEntries(entry);
+          collectedFiles.push(...dirFiles);
+        }
+      }
+
+      if (collectedFiles.length === 0) {
+        const fallback = Array.from(event.dataTransfer.files || []).filter(isImageFile);
+        setBlueprintPendingFiles(fallback);
+      } else {
+        setBlueprintPendingFiles(collectedFiles);
+      }
+    }
+
+    function setBlueprintPendingFiles(files) {
+      blueprintPendingFiles = files;
+      const status = document.getElementById('blueprintUploadStatus');
+      if (status) {
+        if (files.length === 0) {
+          status.textContent = 'No image files detected.';
+        } else {
+          status.textContent = `${files.length} screenshot(s) staged: ` + files.map(f => f.name).slice(0, 3).join(', ') + (files.length > 3 ? '...' : '');
+        }
+      }
+    }
+
+    async function submitBlueprintUpload() {
+      const upSelect = document.getElementById('blueprintUploadDomainSelect');
+      const newInput = document.getElementById('blueprintUploadDomainInput');
+      let targetDomain = '';
+
+      if (upSelect && upSelect.value !== '__NEW__') {
+        targetDomain = upSelect.value.trim();
+      } else if (newInput) {
+        targetDomain = newInput.value.trim();
+      }
+
+      if (!targetDomain) {
+        showToast('Please select or specify a target domain name', 'warning');
+        if (newInput && !newInput.classList.contains('hidden')) newInput.focus();
+        return;
+      }
+      if (!blueprintPendingFiles || blueprintPendingFiles.length === 0) {
+        showToast('Please select or drop at least one screenshot image or folder', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitBlueprintUpload');
+      const status = document.getElementById('blueprintUploadStatus');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...';
+      }
+      if (status) status.textContent = `Uploading ${blueprintPendingFiles.length} screenshots to ${targetDomain}...`;
+
+      try {
+        const filePayloads = await Promise.all(blueprintPendingFiles.map(file => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ filename: file.name, data_base64: reader.result });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        }));
+
+        const resp = await fetch('/api/v1/blueprint/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain: targetDomain, files: filePayloads })
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || ('HTTP ' + resp.status));
+        }
+
+        const data = await resp.json();
+        showToast(`Successfully uploaded ${data.saved_count} screenshots for ${data.domain}!`, 'success');
+
+        blueprintPendingFiles = [];
+        if (newInput) newInput.value = '';
+        const fileInput = document.getElementById('blueprintUploadFileInput');
+        if (fileInput) fileInput.value = '';
+        const folderInput = document.getElementById('blueprintUploadFolderInput');
+        if (folderInput) folderInput.value = '';
+        if (status) status.textContent = '';
+        toggleBlueprintUploadSection();
+
+        await loadBlueprintDomains(data.domain);
+      } catch (err) {
+        showToast('Upload failed: ' + err.message, 'error');
+        if (status) status.textContent = 'Upload failed: ' + err.message;
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Upload & Catalog';
+        }
+      }
+    }
+
+    function openBlueprintModal(preselectedDomain) {
+      const modal = document.getElementById('blueprintModal');
+      const badge = document.getElementById('headerBlueprintBtn');
+      if (modal) modal.classList.remove('hidden');
+      if (badge) badge.setAttribute('aria-expanded', 'true');
+      syncBodyScrollLock();
+      loadBlueprintDomains(preselectedDomain);
+    }
+
+    function closeBlueprintModal() {
+      const modal = document.getElementById('blueprintModal');
+      const badge = document.getElementById('headerBlueprintBtn');
+      if (modal) modal.classList.add('hidden');
+      if (badge) {
+        badge.setAttribute('aria-expanded', 'false');
+        badge.focus();
+      }
+      syncBodyScrollLock();
+    }
+
+    async function loadBlueprintDomains(preselectedDomain) {
+      const select = document.getElementById('blueprintDomainSelect');
+      if (!select) return;
+
+      select.innerHTML = '<option value="">Loading domains...</option>';
+
+      try {
+        const [bpResp, domResp] = await Promise.all([
+          fetch('/api/v1/blueprint/domains').catch(() => null),
+          fetch('/api/v1/history/domains').catch(() => null)
+        ]);
+
+        const bpDomains = (bpResp && bpResp.ok) ? await bpResp.json() : [];
+        const allDomains = (domResp && domResp.ok) ? await domResp.json() : [];
+
+        // Combine unique domain names from both ChromaDB crawled history AND screenshot folders
+        const domainMap = new Map();
+
+        allDomains.forEach(d => {
+          const name = typeof d === 'string' ? d : (d.domain || '');
+          const pages = (d && d.total_pages) ? d.total_pages : 0;
+          if (name) {
+            domainMap.set(name, { screenshots: 0, pages: pages });
+          }
+        });
+
+        bpDomains.forEach(item => {
+          const name = item.domain || '';
+          if (name) {
+            const existing = domainMap.get(name) || { screenshots: 0, pages: 0 };
+            existing.screenshots = item.screenshot_count || 1;
+            domainMap.set(name, existing);
+          }
+        });
+
+        if (domainMap.size === 0) {
+          select.innerHTML = '<option value="">No domains found. Crawl or upload screenshots first.</option>';
+          populateBlueprintUploadDomainSelect();
+          return;
+        }
+
+        let optsHtml = '<option value="">Select an indexed domain...</option>';
+        domainMap.forEach((info, name) => {
+          let badge = '';
+          if (info.screenshots > 0 && info.pages > 0) {
+            badge = ` (${info.screenshots} screenshots, ${info.pages} crawled pages)`;
+          } else if (info.screenshots > 0) {
+            badge = ` (${info.screenshots} screenshots)`;
+          } else {
+            badge = ` (${info.pages} crawled pages)`;
+          }
+          const isSel = preselectedDomain && preselectedDomain.toLowerCase() === name.toLowerCase();
+          optsHtml += `<option value="${escapeHtml(name)}" ${isSel ? 'selected' : ''}>🌐 ${escapeHtml(name)}${badge}</option>`;
+        });
+        select.innerHTML = optsHtml;
+        populateBlueprintUploadDomainSelect();
+
+        if (preselectedDomain) {
+          onBlueprintDomainChange();
+        }
+      } catch (err) {
+        select.innerHTML = `<option value="">Error loading domains: ${err.message}</option>`;
+      }
+    }
+
+    async function onBlueprintDomainChange() {
+      const select = document.getElementById('blueprintDomainSelect');
+      const domain = select ? select.value.trim() : '';
+      currentBlueprintDomain = domain;
+      if (!domain) {
+        document.getElementById('blueprintScreenshotCarousel').innerHTML = '<div class="p-4 text-center text-xs text-slate-400 w-full italic">Select a domain above to view its captured screenshot collection.</div>';
+        document.getElementById('blueprintScreenCountBadge').textContent = '0 screens cataloged';
+        return;
+      }
+      loadDomainScreenshotCarousel(domain);
+    }
+
+    async function loadDomainScreenshotCarousel(domain) {
+      const carousel = document.getElementById('blueprintScreenshotCarousel');
+      const countBadge = document.getElementById('blueprintScreenCountBadge');
+      if (!carousel) return;
+
+      carousel.innerHTML = '<div class="p-3 text-xs text-slate-400 flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin text-teal-600"></i> Loading screenshot collection...</div>';
+
+      try {
+        const resp = await fetch(`/api/v1/screenshots?domain=${encodeURIComponent(domain)}`);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+        const files = Array.isArray(data) ? data : (data.screenshots || []);
+
+        if (countBadge) countBadge.textContent = `${files.length} screens cataloged`;
+
+        if (files.length === 0) {
+          carousel.innerHTML = `
+            <div class="p-3 text-xs text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-circle-info text-amber-500"></i>
+              No disk screenshots found for <strong>${escapeHtml(domain)}</strong>. The blueprint engine will use ChromaDB page vectors to synthesize architecture.
+            </div>`;
+          return;
+        }
+
+        let itemsHtml = '';
+        files.forEach((item, idx) => {
+          const fname = typeof item === 'string' ? item : item.filename;
+          const urlPath = (typeof item === 'object' && item.url_path) ? item.url_path : `/api/v1/screenshots/file/${encodeURIComponent(domain)}/${encodeURIComponent(fname)}`;
+          const fetchPriority = idx === 0 ? 'high' : 'low';
+          itemsHtml += `
+            <div class="carousel-item shrink-0 rounded-lg overflow-hidden border border-ds bg-white p-1 hover:border-teal-500 transition shadow-xs select-none" style="scroll-snap-align: start;">
+              <img src="${urlPath}" alt="${escapeHtml(fname)}" loading="lazy" fetchpriority="${fetchPriority}" class="aspect-video w-48 rounded object-cover cursor-pointer border border-slate-100 hover:opacity-95 transition" onclick="previewCachedScreenshot('${urlPath}')" title="Click to view full image">
+              <div class="text-[10px] font-mono text-slate-700 truncate px-1 pt-1 max-w-[192px]" title="${escapeHtml(fname)}">${escapeHtml(fname)}</div>
+            </div>
+          `;
+        });
+        carousel.innerHTML = itemsHtml;
+      } catch (err) {
+        carousel.innerHTML = `<div class="p-3 text-xs text-rose-500">Failed loading screenshots: ${err.message}</div>`;
+      }
+    }
+
+    function previewCachedScreenshot(url) {
+      window.open(url, '_blank');
+    }
+
+    async function runGenerateBlueprint() {
+      const select = document.getElementById('blueprintDomainSelect');
+      const domain = select ? select.value.trim() : '';
+
+      if (!domain) {
+        showToast('Please select a target domain first', 'warning');
+        return;
+      }
+
+      currentBlueprintDomain = domain;
+      const focus = (document.getElementById('blueprintFocusInput').value || '').trim();
+      const model = document.getElementById('blueprintModelSelect') ? document.getElementById('blueprintModelSelect').value : null;
+
+      const emptyState = document.getElementById('blueprintEmptyState');
+      const loader = document.getElementById('blueprintLoading');
+      const content = document.getElementById('blueprintContent');
+      const btn = document.getElementById('btnRunBlueprint');
+      const exportBar = document.getElementById('blueprintExportActions');
+
+      if (emptyState) emptyState.classList.add('hidden');
+      if (content) content.classList.add('hidden');
+      if (loader) loader.classList.remove('hidden');
+      if (btn) btn.disabled = true;
+
+      try {
+        const resp = await fetch('/api/v1/blueprint/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: domain,
+            custom_focus: focus || null,
+            model: model || null
+          })
+        });
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: 'HTTP ' + resp.status }));
+          throw new Error(err.detail || 'Failed generating blueprint');
+        }
+
+        const data = await resp.json();
+        currentBlueprintResult = data;
+        renderBlueprintResult(data);
+
+        if (loader) loader.classList.add('hidden');
+        if (content) content.classList.remove('hidden');
+        if (exportBar) exportBar.classList.remove('hidden');
+        showToast('Full-stack product blueprint synthesized successfully!', 'success');
+      } catch (err) {
+        if (loader) loader.classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        showToast('Error: ' + err.message, 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function renderBlueprintResult(data) {
+      // 1. Storyboard & Overview
+      const storyText = document.getElementById('bpStoryboardText');
+      if (storyText) {
+        storyText.innerHTML = typeof marked !== 'undefined' ? marked.parse(data.storyboard_markdown) : `<pre>${escapeHtml(data.storyboard_markdown)}</pre>`;
+      }
+
+      // Features Grid
+      const featuresGrid = document.getElementById('bpFeaturesGrid');
+      if (featuresGrid) {
+        featuresGrid.innerHTML = data.features_list.map(f => `
+          <div class="p-2.5 rounded-lg border border-ds bg-slate-50 flex items-start gap-2">
+            <i class="fa-solid fa-circle-check text-teal-600 mt-0.5 text-xs"></i>
+            <span class="text-xs font-semibold text-slate-800">${escapeHtml(f)}</span>
+          </div>
+        `).join('');
+      }
+
+      // Use cases
+      const useCasesList = document.getElementById('bpUseCasesList');
+      if (useCasesList) {
+        useCasesList.innerHTML = data.use_cases.map(uc => `
+          <div class="p-3 rounded-lg border border-ds bg-white shadow-xs space-y-1.5">
+            <div class="font-bold text-xs text-slate-900 flex items-center justify-between">
+              <span>${escapeHtml(uc.title)}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] bg-teal-50 text-teal-800 font-mono border border-teal-200">${escapeHtml(uc.actor)}</span>
+            </div>
+            <div class="text-[11px] text-slate-500 font-mono"><strong class="text-slate-700">Precondition:</strong> ${escapeHtml(uc.precondition)}</div>
+            <div class="text-[11px] text-slate-700 bg-slate-50 p-2 rounded border border-ds leading-relaxed">${escapeHtml(uc.flow)}</div>
+            <div class="text-[11px] text-emerald-800 font-medium"><i class="fa-solid fa-flag-checkered mr-1"></i><strong>Outcome:</strong> ${escapeHtml(uc.outcome)}</div>
+          </div>
+        `).join('');
+      }
+
+      // 2. Diagrams
+      const navContainer = document.getElementById('bpNavDiagramContainer');
+      if (navContainer) {
+        navContainer.innerHTML = `<pre class="text-left font-mono text-[11px] p-3 rounded bg-slate-900 text-teal-300 overflow-x-auto whitespace-pre">${escapeHtml(data.navigation_mermaid)}</pre>`;
+      }
+
+      const erdContainer = document.getElementById('bpErdDiagramContainer');
+      if (erdContainer) {
+        erdContainer.innerHTML = `<pre class="text-left font-mono text-[11px] p-3 rounded bg-slate-900 text-purple-300 overflow-x-auto whitespace-pre">${escapeHtml(data.erd_mermaid)}</pre>`;
+      }
+
+      // 3. Frontend & Design Tokens
+      const compList = document.getElementById('bpComponentsList');
+      if (compList) {
+        compList.innerHTML = data.frontend_components.map(c => `
+          <div class="p-3 rounded-lg border border-ds bg-white space-y-1.5 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-xs text-slate-900 font-mono">${escapeHtml(c.name)}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase bg-slate-100 text-slate-700">${escapeHtml(c.category)}</span>
+            </div>
+            <p class="text-[11px] text-slate-600">${escapeHtml(c.description)}</p>
+            <div class="text-[10px] font-mono text-slate-500">Props: ${escapeHtml(c.props.join(', '))}</div>
+            <div class="text-[10px] font-mono text-teal-700">Children: ${escapeHtml(c.subcomponents.join(', '))}</div>
+          </div>
+        `).join('');
+      }
+
+      const tokensContainer = document.getElementById('bpDesignTokensContainer');
+      if (tokensContainer) {
+        tokensContainer.innerHTML = `<pre class="whitespace-pre">${escapeHtml(JSON.stringify(data.design_tokens, null, 2))}</pre>`;
+      }
+
+      // 4. Backend APIs
+      const apiList = document.getElementById('bpApiEndpointsList');
+      if (apiList) {
+        apiList.innerHTML = data.api_endpoints.map(ep => {
+          const methodColors = {
+            'GET': 'bg-blue-100 text-blue-800 border-blue-200',
+            'POST': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            'PUT': 'bg-amber-100 text-amber-800 border-amber-200',
+            'DELETE': 'bg-rose-100 text-rose-800 border-rose-200'
+          };
+          const badgeClass = methodColors[ep.method] || 'bg-slate-100 text-slate-800';
+
+          return `
+            <div class="p-3 rounded-lg border border-ds bg-white space-y-2 shadow-xs">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 font-mono text-xs font-bold">
+                  <span class="px-2 py-0.5 rounded text-[11px] border ${badgeClass}">${ep.method}</span>
+                  <span class="text-slate-900">${escapeHtml(ep.path)}</span>
+                </div>
+                <span class="text-[11px] text-slate-400 font-mono">${escapeHtml(ep.screen_origin)}</span>
+              </div>
+              <p class="text-[11px] text-slate-600">${escapeHtml(ep.summary)}</p>
+              ${ep.request_body ? `
+                <div class="text-[10px] font-mono bg-slate-50 p-2 rounded border border-ds">
+                  <span class="font-bold text-slate-700">Request Body:</span>
+                  <pre class="mt-1 text-slate-800 whitespace-pre">${escapeHtml(JSON.stringify(ep.request_body, null, 2))}</pre>
+                </div>
+              ` : ''}
+              <div class="text-[10px] font-mono bg-slate-50 p-2 rounded border border-ds">
+                <span class="font-bold text-slate-700">Response Body:</span>
+                <pre class="mt-1 text-slate-800 whitespace-pre">${escapeHtml(JSON.stringify(ep.response_body, null, 2))}</pre>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function switchBlueprintTab(tabName) {
+      const tabs = ['storyboard', 'diagrams', 'frontend', 'backend'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tabBtn_${t}`);
+        const panel = document.getElementById(`bpPanel_${t}`);
+        if (btn) {
+          const isAct = t === tabName;
+          btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+          btn.className = isAct ?
+            'px-3 py-2.5 font-bold border-b-2 border-teal-600 text-teal-700 flex items-center gap-1.5' :
+            'px-3 py-2.5 font-bold border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center gap-1.5';
+        }
+        if (panel) {
+          if (t === tabName) panel.classList.remove('hidden');
+          else panel.classList.add('hidden');
+        }
+      });
+    }
+
+    function copyBlueprintDiagram(type) {
+      if (!currentBlueprintResult) return;
+      const text = type === 'nav' ? currentBlueprintResult.navigation_mermaid : currentBlueprintResult.erd_mermaid;
+      navigator.clipboard.writeText(text);
+      showToast(`${type.toUpperCase()} Mermaid diagram copied to clipboard!`, 'success');
+    }
+
+    async function exportBlueprint(fmt) {
+      if (!currentBlueprintDomain) {
+        showToast('Generate a blueprint first before exporting', 'warning');
+        return;
+      }
+
+      const format = fmt || 'pdf';
+      const dossierMd = currentBlueprintResult ? currentBlueprintResult.full_markdown_dossier : null;
+
+      // Instant client-side download for Markdown if blueprint is already generated
+      if (format === 'markdown' && dossierMd) {
+        try {
+          const blob = new Blob([dossierMd], { type: 'text/markdown;charset=utf-8' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = `blueprint_${currentBlueprintDomain.replace(/\./g, '_')}.md`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          a.remove();
+          showToast('Markdown architecture blueprint downloaded!', 'success');
+          return;
+        } catch (e) {
+          console.warn('Client-side download fallback to server:', e);
+        }
+      }
+
+      const focus = (document.getElementById('blueprintFocusInput').value || '').trim();
+      const model = document.getElementById('blueprintModelSelect') ? document.getElementById('blueprintModelSelect').value : null;
+
+      try {
+        showToast(`Preparing ${format.toUpperCase()} architecture blueprint...`, 'info');
+        const resp = await fetch('/api/v1/blueprint/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain: currentBlueprintDomain,
+            custom_focus: focus || null,
+            model: model || null,
+            format: format,
+            dossier_markdown: dossierMd || null,
+            blueprint_data: currentBlueprintResult || null
+          })
+        });
+
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        const ext = format === 'markdown' ? 'md' : 'pdf';
+        a.download = `blueprint_${currentBlueprintDomain.replace(/\./g, '_')}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+        showToast(`${format.toUpperCase()} architecture blueprint downloaded!`, 'success');
+      } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+      }
     }
 
     let chromaStoreCache = null;
@@ -2024,30 +4708,23 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       if (!container) return;
 
       const toast = document.createElement('div');
-      toast.className = 'pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl shadow-2xl border text-xs leading-relaxed transition-all duration-300 transform translate-x-12 opacity-0 backdrop-blur-md';
+      toast.className = 'pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl shadow-xl border text-xs leading-relaxed transition-all duration-300 transform translate-x-12 opacity-0 backdrop-blur-md bg-[#1c1b1b] border-black/20 text-white';
 
-      let icon = 'fa-circle-info';
-      let colors = 'bg-slate-900/95 border-teal-500/40 text-teal-200 shadow-teal-950/50';
-
+      let icon = 'fa-circle-info text-cyan-400';
       if (type === 'success') {
-        icon = 'fa-circle-check';
-        colors = 'bg-slate-900/95 border-emerald-500/40 text-emerald-200 shadow-emerald-950/50';
+        icon = 'fa-circle-check text-emerald-400';
       } else if (type === 'warning') {
-        icon = 'fa-triangle-exclamation';
-        colors = 'bg-slate-900/95 border-amber-500/40 text-amber-200 shadow-amber-950/50';
+        icon = 'fa-triangle-exclamation text-amber-400';
       } else if (type === 'error') {
-        icon = 'fa-circle-xmark';
-        colors = 'bg-slate-900/95 border-red-500/40 text-red-200 shadow-red-950/50';
+        icon = 'fa-circle-xmark text-red-400';
       } else if (type === 'info') {
-        icon = 'fa-circle-info';
-        colors = 'bg-slate-900/95 border-cyan-500/40 text-cyan-200 shadow-cyan-950/50';
+        icon = 'fa-circle-info text-cyan-400';
       }
 
-      toast.className += ' ' + colors;
       toast.innerHTML = `
         <i class="fa-solid ${icon} mt-0.5 text-sm shrink-0"></i>
         <div class="flex-1 font-medium text-slate-100">${message}</div>
-        <button type="button" class="text-slate-400 hover:text-white shrink-0 ml-1 p-0.5 rounded hover:bg-slate-800" aria-label="Dismiss toast">
+        <button type="button" class="text-slate-400 hover:text-white shrink-0 ml-1 p-0.5 rounded hover:bg-white/10" aria-label="Dismiss toast">
           <i class="fa-solid fa-xmark text-xs"></i>
         </button>
       `;
@@ -2124,7 +4801,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
       if (steps.length === 0) {
         container.innerHTML = `
-          <div class="text-[11px] text-slate-500 italic p-2 bg-slate-950/40 rounded border border-dashed border-slate-800 text-center">
+          <div class="text-[11px] text-ds-muted italic p-2 bg-white rounded border border-dashed border-ds text-center">
             No custom steps added. Enable recipes above or generate with AI.
           </div>`;
         return;
@@ -2144,15 +4821,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         };
         const iconLabel = actionIcons[s.action] || s.action;
         const targetDesc = s.selector || s.value || s.action;
-        const optBadge = s.optional ? '<span class="text-[9px] px-1 bg-slate-800 text-slate-400 rounded">opt</span>' : '';
+        const optBadge = s.optional ? '<span class="text-[9px] px-1 bg-ds-surface-low text-ds-muted rounded border border-ds">opt</span>' : '';
         html += `
-          <div class="flex items-center justify-between gap-2 p-1.5 bg-slate-950/70 border border-slate-800 rounded text-[11px]">
+          <div class="flex items-center justify-between gap-2 p-2 bg-white border border-ds rounded-lg text-[11px] shadow-xs">
             <div class="flex items-center gap-1.5 truncate">
-              <span class="font-bold text-purple-300 font-mono text-[11px] uppercase">${idx + 1}. ${iconLabel}</span>
-              <span class="text-slate-300 truncate max-w-[160px]" title="${targetDesc}">${targetDesc}</span>
+              <span class="font-bold text-purple-700 font-mono text-[11px] uppercase">${idx + 1}. ${iconLabel}</span>
+              <span class="text-[#1c1b1b] truncate max-w-[160px]" title="${targetDesc}">${targetDesc}</span>
               ${optBadge}
             </div>
-            <button type="button" onclick="removeRpaStep('${mode}', ${idx})" class="text-red-400 hover:text-red-300 p-0.5" title="Remove step">
+            <button type="button" onclick="removeRpaStep('${mode}', ${idx})" class="text-ds-muted hover:text-red-600 p-0.5 transition" title="Remove step">
               <i class="fa-solid fa-xmark text-xs"></i>
             </button>
           </div>
@@ -2962,7 +5639,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             prompt: prompt || null,
             model: aiModel || null,
             rpa_steps: scrapeRpaSteps,
-            auto_dismiss_modals: dismissCookies
+            auto_dismiss_modals: dismissCookies,
+            capture_screenshot: document.getElementById('scrapeCaptureScreenshot') ? document.getElementById('scrapeCaptureScreenshot').checked : false
           })
         });
 
@@ -3074,18 +5752,301 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       tbody.innerHTML = html;
     }
 
+    // ==========================================
+    // PREVIEW MODAL & MARKDOWN READER SYSTEM
+    // ==========================================
+
+    function escapeHtmlEntities(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderPreviewMarkdown(source) {
+      if (!source || typeof source !== 'string' || !source.trim()) {
+        return '<p class="text-ds-muted italic p-4 text-center">No markdown content available for this page.</p>';
+      }
+
+      let text = source.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n');
+
+      // 1. Isolate code blocks
+      const codeBlocks = [];
+      text = text.replace(/```([a-zA-Z0-9_+-]*)\\n([\\s\\S]*?)```/g, (match, lang, code) => {
+        const placeholder = `%%MD_CODE_BLOCK_${codeBlocks.length}%%`;
+        codeBlocks.push({ lang: (lang || 'code').trim(), code: code });
+        return placeholder;
+      });
+
+      function formatInline(line) {
+        if (!line) return '';
+        let s = escapeHtmlEntities(line);
+        // Inline code
+        s = s.replace(/`([^`]+)`/g, '<code class="preview-inline-code">$1</code>');
+        // Images
+        s = s.replace(/!\\[([^\\]]*)\\]\\((https?:\\/\\/[^\\s\\)]+)\\)/g, '<figure class="my-3"><img src="$2" alt="$1" class="max-w-full rounded-lg border border-ds shadow-sm" loading="lazy"><figcaption class="text-xs text-ds-muted mt-1 text-center">$1</figcaption></figure>');
+        // Links
+        s = s.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s\\)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="preview-link">$1 <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>');
+        // Bold
+        s = s.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+        s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        // Italic
+        s = s.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+        s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+        // Strikethrough
+        s = s.replace(/~~([^~]+)~~/g, '<del class="text-ds-muted">$1</del>');
+        return s;
+      }
+
+      const lines = text.split('\\n');
+      const out = [];
+      let inUl = false;
+      let inOl = false;
+      let inBlockquote = false;
+      let inTable = false;
+      let blockquoteBuffer = [];
+
+      function closeLists() {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (inOl) { out.push('</ol>'); inOl = false; }
+      }
+
+      function closeBlockquote() {
+        if (inBlockquote) {
+          out.push(`<blockquote>${blockquoteBuffer.map(formatInline).join('<br>')}</blockquote>`);
+          inBlockquote = false;
+          blockquoteBuffer = [];
+        }
+      }
+
+      function closeTable() {
+        if (inTable) {
+          out.push('</tbody></table></div>');
+          inTable = false;
+        }
+      }
+
+      function closeAll() {
+        closeLists();
+        closeBlockquote();
+        closeTable();
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+
+        // Check code block placeholder
+        if (trimmed.startsWith('%%MD_CODE_BLOCK_') && trimmed.endsWith('%%')) {
+          closeAll();
+          const idx = parseInt(trimmed.replace('%%MD_CODE_BLOCK_', '').replace('%%', ''), 10);
+          const cb = codeBlocks[idx];
+          if (cb) {
+            const escapedCode = escapeHtmlEntities(cb.code);
+            const encoded = encodeURIComponent(cb.code);
+            out.push(`
+              <div class="preview-code-block">
+                <div class="preview-code-header">
+                  <span class="flex items-center gap-1.5"><i class="fa-solid fa-terminal text-[10px]"></i> ${escapeHtmlEntities(cb.lang || 'code')}</span>
+                  <button type="button" onclick="copySnippet(this, decodeURIComponent('${encoded}'))" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] transition flex items-center gap-1">
+                    <i class="fa-regular fa-copy"></i> <span>Copy</span>
+                  </button>
+                </div>
+                <pre class="preview-code-pre"><code>${escapedCode}</code></pre>
+              </div>
+            `);
+          }
+          continue;
+        }
+
+        // Blank line
+        if (!trimmed) {
+          closeAll();
+          continue;
+        }
+
+        // Table row | col | col |
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+          closeLists();
+          closeBlockquote();
+          const cells = trimmed.split('|').slice(1, -1).map(c => c.trim());
+          const isDivider = cells.every(c => /^:?-+:?$/.test(c));
+          if (isDivider) {
+            continue;
+          }
+          if (!inTable) {
+            inTable = true;
+            out.push('<div class="overflow-x-auto my-3"><table class="preview-md-table"><thead><tr>');
+            cells.forEach(c => out.push(`<th>${formatInline(c)}</th>`));
+            out.push('</tr></thead><tbody>');
+          } else {
+            out.push('<tr>');
+            cells.forEach(c => out.push(`<td>${formatInline(c)}</td>`));
+            out.push('</tr>');
+          }
+          continue;
+        } else {
+          closeTable();
+        }
+
+        // Headings
+        if (trimmed.startsWith('#')) {
+          closeAll();
+          if (trimmed.startsWith('#### ')) {
+            out.push(`<h4>${formatInline(trimmed.substring(5))}</h4>`);
+          } else if (trimmed.startsWith('### ')) {
+            out.push(`<h3>${formatInline(trimmed.substring(4))}</h3>`);
+          } else if (trimmed.startsWith('## ')) {
+            out.push(`<h2>${formatInline(trimmed.substring(3))}</h2>`);
+          } else if (trimmed.startsWith('# ')) {
+            out.push(`<h1>${formatInline(trimmed.substring(2))}</h1>`);
+          } else {
+            out.push(`<p>${formatInline(trimmed)}</p>`);
+          }
+          continue;
+        }
+
+        // Horizontal Rule
+        if (/^(-{3,}|\\*{3,}|_{3,})$/.test(trimmed)) {
+          closeAll();
+          out.push('<hr class="my-4 border-ds">');
+          continue;
+        }
+
+        // Blockquote
+        if (trimmed.startsWith('>')) {
+          closeLists();
+          inBlockquote = true;
+          blockquoteBuffer.push(trimmed.replace(/^>\\s?/, ''));
+          continue;
+        } else {
+          closeBlockquote();
+        }
+
+        // Unordered list
+        const ulMatch = trimmed.match(/^[*\\-]\\s+(.*)$/);
+        if (ulMatch) {
+          if (inOl) { out.push('</ol>'); inOl = false; }
+          if (!inUl) { out.push('<ul>'); inUl = true; }
+          out.push(`<li>${formatInline(ulMatch[1])}</li>`);
+          continue;
+        }
+
+        // Ordered list
+        const olMatch = trimmed.match(/^\\d+\\.\\s+(.*)$/);
+        if (olMatch) {
+          if (inUl) { out.push('</ul>'); inUl = false; }
+          if (!inOl) { out.push('<ol>'); inOl = true; }
+          out.push(`<li>${formatInline(olMatch[1])}</li>`);
+          continue;
+        }
+
+        // Paragraph
+        closeLists();
+        out.push(`<p>${formatInline(trimmed)}</p>`);
+      }
+
+      closeAll();
+      return out.join('\\n');
+    }
+
+    function togglePreviewSource() {
+      const reading = document.getElementById('previewReading');
+      const pre = document.getElementById('previewContent');
+      const toggleText = document.getElementById('previewSourceToggleText');
+      const toggleIcon = document.getElementById('previewSourceToggleIcon');
+      if (!reading || !pre) return;
+
+      const isReadingVisible = !reading.classList.contains('hidden');
+      if (isReadingVisible) {
+        reading.classList.add('hidden');
+        pre.classList.remove('hidden');
+        if (toggleText) toggleText.textContent = 'Reader View';
+        if (toggleIcon) toggleIcon.className = 'fa-regular fa-file-lines text-[11px]';
+      } else {
+        pre.classList.add('hidden');
+        reading.classList.remove('hidden');
+        if (toggleText) toggleText.textContent = 'Raw Source';
+        if (toggleIcon) toggleIcon.className = 'fa-solid fa-code text-[11px]';
+      }
+    }
+
+    function togglePreviewFullscreen() {
+      const modalDialog = document.getElementById('previewModalDialog');
+      const icon = document.getElementById('previewFullscreenIcon');
+      const btn = document.getElementById('previewFullscreenBtn');
+      if (!modalDialog) return;
+
+      const isFullscreen = modalDialog.classList.toggle('preview-modal-fullscreen');
+      if (icon) {
+        if (isFullscreen) {
+          icon.className = 'fa-solid fa-compress text-xs';
+          if (btn) btn.setAttribute('title', 'Exit Fullscreen');
+        } else {
+          icon.className = 'fa-solid fa-expand text-xs';
+          if (btn) btn.setAttribute('title', 'Toggle Fullscreen');
+        }
+      }
+    }
+
+    function copySnippet(btn, code) {
+      if (!navigator.clipboard) {
+        showToast('Clipboard access unavailable', 'warning');
+        return;
+      }
+      navigator.clipboard.writeText(code).then(() => {
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> <span>Copied!</span>';
+        setTimeout(() => { btn.innerHTML = origHtml; }, 2000);
+      }).catch(() => {
+        showToast('Code snippet copied!');
+      });
+    }
+
     let activePreviewIndex = 0;
     function showPreview(idx) {
       activePreviewIndex = idx;
       const r = window.crawledResults ? window.crawledResults[idx] : null;
       if (!r) return;
       const modal = document.getElementById('previewModal');
-      document.getElementById('previewTitle').innerText = r.title || r.final_url;
-
-      const mdStats = document.getElementById('previewMdStats');
-      if (mdStats) {
-        mdStats.innerText = `Cleaned Markdown (${(r.markdown || '').length.toLocaleString()} characters)`;
+      document.getElementById('previewTitle').innerText = r.title || r.final_url || 'Page Preview';
+      const previewUrl = document.getElementById('previewUrl');
+      const previewUrlText = document.getElementById('previewUrlText');
+      const targetUrl = r.final_url || r.url || '#';
+      if (previewUrl) {
+        previewUrl.href = targetUrl;
       }
+      if (previewUrlText) {
+        previewUrlText.textContent = targetUrl;
+      }
+
+      // Metadata chips
+      const statusBadge = document.getElementById('previewStatusBadge');
+      if (statusBadge) {
+        const sc = r.status_code || 200;
+        statusBadge.textContent = `${sc} ${sc === 200 ? 'OK' : ''}`.trim();
+        statusBadge.className = sc >= 200 && sc < 300 ? 'status-pill ok shrink-0 text-[10px]' : 'status-pill bad shrink-0 text-[10px]';
+      }
+      const engineBadge = document.getElementById('previewEngineBadge');
+      if (engineBadge) {
+        engineBadge.textContent = (r.discovery_method || r.strategy_used || 'FAST').toUpperCase();
+      }
+
+      // Reading statistics
+      const source = r.markdown || '';
+      const charCount = source.length;
+      const wordCount = source.trim() ? source.trim().split(/\\s+/).length : 0;
+      const readMinutes = Math.max(1, Math.ceil(wordCount / 200));
+
+      const readTimeEl = document.getElementById('previewReadTime');
+      if (readTimeEl) readTimeEl.textContent = `${readMinutes} min read`;
+      const wordCountEl = document.getElementById('previewWordCount');
+      if (wordCountEl) wordCountEl.textContent = `${wordCount.toLocaleString()} words`;
+      const charCountEl = document.getElementById('previewCharCount');
+      if (charCountEl) charCountEl.textContent = `${charCount.toLocaleString()} characters`;
 
       if (r.ai_data && Object.keys(r.ai_data).length > 0) {
         currentAiData = r.ai_data;
@@ -3111,37 +6072,50 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
       const mdTab = document.getElementById('viewMdTab');
       const aiTab = document.getElementById('viewAiTab');
+      const screenshotTab = document.getElementById('viewScreenshotTab');
       const rpaTab = document.getElementById('viewRpaTab');
       const netTab = document.getElementById('viewNetworkTab');
       const elemTab = document.getElementById('viewElementsTab');
 
       const mdSec = document.getElementById('previewMdSection');
       const aiSec = document.getElementById('previewAiSection');
+      const screenshotSec = document.getElementById('previewScreenshotSection');
       const rpaSec = document.getElementById('previewRpaSection');
       const netSec = document.getElementById('previewNetworkSection');
       const elemSec = document.getElementById('previewElementsSection');
       const pre = document.getElementById('previewContent');
 
-      const baseInactive = 'px-3.5 py-1.5 bg-slate-800 text-slate-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
-      mdTab.className = baseInactive;
-      aiTab.className = baseInactive;
+      const baseInactive = 'preview-tab';
+      if (mdTab) mdTab.className = baseInactive;
+      if (aiTab) aiTab.className = baseInactive;
+      if (screenshotTab) screenshotTab.className = baseInactive;
       if (rpaTab) rpaTab.className = baseInactive;
       if (netTab) netTab.className = baseInactive;
       if (elemTab) elemTab.className = baseInactive;
 
-      mdSec.classList.add('hidden');
-      aiSec.classList.add('hidden');
+      if (mdSec) mdSec.classList.add('hidden');
+      if (aiSec) aiSec.classList.add('hidden');
+      if (screenshotSec) screenshotSec.classList.add('hidden');
       if (rpaSec) rpaSec.classList.add('hidden');
       if (netSec) netSec.classList.add('hidden');
       if (elemSec) elemSec.classList.add('hidden');
 
       if (tab === 'markdown') {
-        mdTab.className = 'px-3.5 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
-        mdSec.classList.remove('hidden');
-        pre.innerText = r.markdown || '(No markdown extracted)';
+        if (mdTab) mdTab.className = 'preview-tab preview-tab-on';
+        if (mdSec) mdSec.classList.remove('hidden');
+        const reading = document.getElementById('previewReading');
+        const source = r.markdown || '(No markdown extracted)';
+        if (reading) reading.innerHTML = renderPreviewMarkdown(source);
+        if (pre) pre.textContent = source;
+        const sourceToggleText = document.getElementById('previewSourceToggleText');
+        const sourceToggleIcon = document.getElementById('previewSourceToggleIcon');
+        if (sourceToggleText) sourceToggleText.textContent = 'Raw Source';
+        if (sourceToggleIcon) sourceToggleIcon.className = 'fa-solid fa-code text-[11px]';
+        if (reading) reading.classList.remove('hidden');
+        if (pre) pre.classList.add('hidden');
       } else if (tab === 'ai') {
-        aiTab.className = 'px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
-        aiSec.classList.remove('hidden');
+        if (aiTab) aiTab.className = 'preview-tab preview-tab-on';
+        if (aiSec) aiSec.classList.remove('hidden');
 
         const activeAiData = r.ai_data || currentAiData;
         const hasData = activeAiData && Object.keys(activeAiData).length > 0;
@@ -3151,15 +6125,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const jsonPre = document.getElementById('previewAiJson');
 
         if (hasData) {
-          dataContainer.classList.remove('hidden');
-          triggerContainer.classList.add('hidden');
-          jsonPre.innerText = JSON.stringify(activeAiData, null, 2);
+          if (dataContainer) dataContainer.classList.remove('hidden');
+          if (triggerContainer) triggerContainer.classList.add('hidden');
+          if (jsonPre) jsonPre.innerText = JSON.stringify(activeAiData, null, 2);
         } else {
-          dataContainer.classList.add('hidden');
-          triggerContainer.classList.remove('hidden');
+          if (dataContainer) dataContainer.classList.add('hidden');
+          if (triggerContainer) triggerContainer.classList.remove('hidden');
         }
+      } else if (tab === 'screenshot') {
+        if (screenshotTab) screenshotTab.className = 'preview-tab preview-tab-on';
+        if (screenshotSec) screenshotSec.classList.remove('hidden');
+        renderPreviewScreenshot();
       } else if (tab === 'rpa') {
-        if (rpaTab) rpaTab.className = 'px-3.5 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
+        if (rpaTab) rpaTab.className = 'preview-tab preview-tab-on';
         if (rpaSec) rpaSec.classList.remove('hidden');
 
         const logsList = document.getElementById('previewRpaLogsList');
@@ -3169,23 +6147,101 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         if (logsList) {
           if (logs.length === 0) {
-            logsList.innerHTML = '<div class="text-slate-500 italic p-3 text-center">No interactive RPA actions logged for this page.</div>';
+            logsList.innerHTML = '<div class="text-ds-muted italic p-3 text-center">No interactive RPA actions logged for this page.</div>';
           } else {
             logsList.innerHTML = logs.map(l => {
               const isSuccess = l.includes('Success');
-              const icon = isSuccess ? 'fa-circle-check text-emerald-400' : 'fa-triangle-exclamation text-amber-400';
-              return `<div class="flex items-start gap-2 py-1.5 border-b border-slate-800/70"><i class="fa-solid ${icon} mt-0.5 text-xs"></i><span class="leading-relaxed text-slate-200">${l}</span></div>`;
+              const icon = isSuccess ? 'fa-circle-check text-emerald-600' : 'fa-triangle-exclamation text-amber-600';
+              return `<div class="flex items-start gap-2 py-1.5 border-b border-ds/70"><i class="fa-solid ${icon} mt-0.5 text-xs"></i><span class="leading-relaxed text-[#1c1b1b]">${l}</span></div>`;
             }).join('');
           }
         }
       } else if (tab === 'network') {
-        if (netTab) netTab.className = 'px-3.5 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
+        if (netTab) netTab.className = 'preview-tab preview-tab-on';
         if (netSec) netSec.classList.remove('hidden');
         renderPreviewNetwork();
       } else if (tab === 'elements') {
-        if (elemTab) elemTab.className = 'px-3.5 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition';
+        if (elemTab) elemTab.className = 'preview-tab preview-tab-on';
         if (elemSec) elemSec.classList.remove('hidden');
         renderPreviewElements();
+      }
+    }
+
+    function renderPreviewScreenshot() {
+      const r = window.crawledResults ? window.crawledResults[activePreviewIndex] : null;
+      if (!r) return;
+
+      const img = document.getElementById('screenshotImg');
+      const emptyNotice = document.getElementById('screenshotEmptyNotice');
+      const openBtn = document.getElementById('openFullScreenshotBtn');
+      const badge = document.getElementById('previewScreenshotBadge');
+
+      const url = r.screenshot_url;
+      if (url) {
+        if (img) {
+          img.src = url;
+          img.classList.remove('hidden');
+        }
+        if (emptyNotice) emptyNotice.classList.add('hidden');
+        if (openBtn) openBtn.classList.remove('hidden');
+        if (badge) badge.classList.remove('hidden');
+      } else {
+        if (img) {
+          img.src = '';
+          img.classList.add('hidden');
+        }
+        if (emptyNotice) emptyNotice.classList.remove('hidden');
+        if (openBtn) openBtn.classList.add('hidden');
+      }
+    }
+
+    function openScreenshotInNewTab() {
+      const r = window.crawledResults ? window.crawledResults[activePreviewIndex] : null;
+      if (r && r.screenshot_url) {
+        window.open(r.screenshot_url, '_blank');
+      }
+    }
+
+    async function runPreviewVisionExtract() {
+      const r = window.crawledResults ? window.crawledResults[activePreviewIndex] : null;
+      if (!r) return;
+
+      const taskSelect = document.getElementById('visionTaskSelect');
+      const task = taskSelect ? taskSelect.value : 'chart_to_table';
+      const resultCard = document.getElementById('visionResultCard');
+      const btn = document.getElementById('runVisionBtn');
+
+      if (resultCard) {
+        resultCard.classList.remove('hidden');
+        resultCard.innerHTML = '<div class="text-purple-600"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Analyzing visual content with Vision LLM...</div>';
+      }
+      if (btn) btn.disabled = true;
+
+      try {
+        const payload = {
+          task: task,
+          image_url: r.screenshot_url ? window.location.origin + r.screenshot_url : null,
+          image_path: r.screenshot_path || null,
+        };
+
+        const res = await fetch('/api/v1/vision/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        if (data.error) {
+          resultCard.innerHTML = `<div class="text-rose-600 font-bold">Error: ${escapeHtml(data.error)}</div>`;
+        } else {
+          resultCard.innerHTML = `<div class="text-purple-900 font-bold mb-1">Model: ${escapeHtml(data.model_used)}</div><div class="whitespace-pre-wrap">${escapeHtml(data.extracted_text)}</div>`;
+        }
+      } catch (err) {
+        if (resultCard) resultCard.innerHTML = `<div class="text-rose-600 font-bold">Failed to extract: ${escapeHtml(err.message)}</div>`;
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 
@@ -3217,8 +6273,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
       if (filtered.length === 0) {
         list.innerHTML = `
-          <div class="text-slate-500 italic p-6 text-center bg-slate-950/60 rounded-xl border border-slate-800">
-            ${calls.length === 0 ? 'No background Fetch/XHR API calls recorded for this page.<br><span class="text-[11px] text-slate-600 mt-1 block">(Tip: Use Browser Engine with JavaScript enabled to intercept background API traffic)</span>' : 'No network calls match your filter.'}
+          <div class="text-ds-muted italic p-6 text-center bg-white rounded-xl border border-ds shadow-sm">
+            ${calls.length === 0 ? 'No background Fetch/XHR API calls recorded for this page.<br><span class="text-[11px] text-ds-muted mt-1 block">(Tip: Use Browser Engine with JavaScript enabled to intercept background API traffic)</span>' : 'No network calls match your filter.'}
           </div>
         `;
         return;
@@ -3226,32 +6282,32 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
       list.innerHTML = filtered.map((c, i) => {
         const is2xx = c.status >= 200 && c.status < 300;
-        const statusClass = is2xx ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60' : 'bg-red-950/80 text-red-300 border-red-700/60';
+        const statusClass = is2xx ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-red-50 text-red-700 border-red-300';
         const methodColors = {
-          GET: 'bg-blue-950/80 text-blue-300 border-blue-700/60',
-          POST: 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60',
-          PUT: 'bg-amber-950/80 text-amber-300 border-amber-700/60',
-          DELETE: 'bg-red-950/80 text-red-300 border-red-700/60'
+          GET: 'bg-blue-50 text-blue-700 border-blue-300',
+          POST: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+          PUT: 'bg-amber-50 text-amber-800 border-amber-300',
+          DELETE: 'bg-red-50 text-red-700 border-red-300'
         };
-        const methodClass = methodColors[c.method] || 'bg-slate-800 text-slate-300 border-slate-700';
+        const methodClass = methodColors[c.method] || 'bg-slate-100 text-slate-700 border-slate-300';
         const jsonStr = c.response_data ? (typeof c.response_data === 'object' ? JSON.stringify(c.response_data, null, 2) : String(c.response_data)) : null;
 
         return `
-          <div class="p-3 bg-slate-950/90 rounded-xl border border-slate-800/80 space-y-2 hover:border-cyan-700/40 transition">
+          <div class="p-3 bg-white rounded-xl border border-ds space-y-2 hover:border-ds-secondary/40 transition shadow-sm">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <span class="px-2 py-0.5 rounded text-[11px] font-bold border font-mono ${methodClass}">${c.method}</span>
                 <span class="px-2 py-0.5 rounded text-[11px] font-bold border font-mono ${statusClass}">${c.status}</span>
-                <span class="font-mono text-slate-200 truncate select-all" title="${c.url}">${c.url}</span>
+                <span class="font-mono text-[#1c1b1b] truncate select-all" title="${c.url}">${c.url}</span>
               </div>
-              <div class="flex items-center gap-2 flex-shrink-0 text-[11px] text-slate-400 font-mono">
+              <div class="flex items-center gap-2 flex-shrink-0 text-[11px] text-ds-muted font-mono">
                 <span>${c.resource_type || 'xhr'}</span>
-                ${jsonStr ? `<button onclick="copyNetworkJson(${i})" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy JSON</button>` : ''}
-                ${jsonStr ? `<button onclick="toggleNetworkPayload(${i})" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition"><i class="fa-solid fa-code mr-1"></i> Payload</button>` : ''}
+                ${jsonStr ? `<button type="button" onclick="copyNetworkJson(${i})" class="btn-ghost px-2 py-1 rounded text-[11px]"><i class="fa-regular fa-copy mr-1"></i> Copy JSON</button>` : ''}
+                ${jsonStr ? `<button type="button" onclick="toggleNetworkPayload(${i})" class="btn-ghost px-2 py-1 rounded text-[11px]"><i class="fa-solid fa-code mr-1"></i> Payload</button>` : ''}
               </div>
             </div>
-            ${c.request_data ? `<div class="text-[11px] font-mono text-slate-400 bg-slate-900/80 p-2 rounded border border-slate-800 truncate"><span class="text-slate-500 font-semibold">Post Data:</span> ${c.request_data}</div>` : ''}
-            ${jsonStr ? `<div id="networkPayload_${i}" class="hidden mt-2"><pre class="bg-slate-900 p-3 rounded-lg text-[11px] font-mono text-cyan-300 max-h-56 overflow-auto whitespace-pre-wrap border border-slate-800">${jsonStr}</pre></div>` : ''}
+            ${c.request_data ? `<div class="text-[11px] font-mono text-ds-muted bg-ds-surface-low p-2 rounded border border-ds truncate"><span class="text-ds-outline font-semibold">Post Data:</span> ${c.request_data}</div>` : ''}
+            ${jsonStr ? `<div id="networkPayload_${i}" class="hidden mt-2"><pre class="bg-[#0f172a] p-3.5 rounded-lg text-[11px] font-mono text-[#38bdf8] max-h-56 overflow-auto whitespace-pre-wrap border border-slate-700/80 shadow-inner">${jsonStr}</pre></div>` : ''}
           </div>
         `;
       }).join('');
@@ -3280,10 +6336,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const list = document.getElementById(`elemCatList${c.charAt(0).toUpperCase() + c.slice(1)}`);
         if (btn && list) {
           if (c === cat) {
-            btn.className = 'px-3 py-1.5 border-b-2 border-amber-500 text-amber-300 font-semibold flex items-center gap-1.5';
+            btn.className = 'px-3 py-1.5 border-b-2 border-amber-600 text-amber-700 font-semibold flex items-center gap-1.5';
             list.classList.remove('hidden');
           } else {
-            btn.className = 'px-3 py-1.5 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold flex items-center gap-1.5';
+            btn.className = 'px-3 py-1.5 border-b-2 border-transparent text-ds-muted hover:text-[#1c1b1b] font-semibold flex items-center gap-1.5';
             list.classList.add('hidden');
           }
         }
@@ -3306,15 +6362,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const btnList = document.getElementById('elemCatListButtons');
       const buttons = dom.buttons || [];
       if (btnList) {
-        btnList.innerHTML = buttons.length === 0 ? '<div class="text-slate-500 italic p-3 text-center text-xs">No buttons detected.</div>' : buttons.map(b => `
-          <div class="flex items-center justify-between p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-xs gap-3">
+        btnList.innerHTML = buttons.length === 0 ? '<div class="text-ds-muted italic p-3 text-center text-xs">No buttons detected.</div>' : buttons.map(b => `
+          <div class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-ds text-xs gap-3 shadow-xs">
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-amber-950 text-amber-300 border border-amber-700/60">${b.tag}</span>
-              <span class="text-slate-200 font-medium truncate">${b.text}</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-amber-50 text-amber-800 border border-amber-200">${b.tag}</span>
+              <span class="text-[#1c1b1b] font-medium truncate">${b.text}</span>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
-              <span class="text-slate-400 truncate max-w-xs bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${b.selector}</span>
-              <button onclick="copySelectorText('${b.selector.replace(/'/g, "\\'")}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
+              <span class="text-ds-muted truncate max-w-xs bg-ds-surface-low px-2 py-0.5 rounded border border-ds">${b.selector}</span>
+              <button type="button" onclick="copySelectorText('${b.selector.replace(/'/g, "\\'")}')" class="btn-ghost px-2 py-1 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
             </div>
           </div>
         `).join('');
@@ -3324,15 +6380,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const inpList = document.getElementById('elemCatListInputs');
       const inputs = dom.inputs || [];
       if (inpList) {
-        inpList.innerHTML = inputs.length === 0 ? '<div class="text-slate-500 italic p-3 text-center text-xs">No form inputs detected.</div>' : inputs.map(inp => `
-          <div class="flex items-center justify-between p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-xs gap-3">
+        inpList.innerHTML = inputs.length === 0 ? '<div class="text-ds-muted italic p-3 text-center text-xs">No form inputs detected.</div>' : inputs.map(inp => `
+          <div class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-ds text-xs gap-3 shadow-xs">
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-950 text-blue-300 border border-blue-700/60">${inp.type || inp.tag}</span>
-              <span class="text-slate-300 truncate">${inp.name ? `name="${inp.name}"` : ''} ${inp.placeholder ? `placeholder="${inp.placeholder}"` : ''}</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-800 border border-blue-200">${inp.type || inp.tag}</span>
+              <span class="text-[#1c1b1b] truncate">${inp.name ? `name="${inp.name}"` : ''} ${inp.placeholder ? `placeholder="${inp.placeholder}"` : ''}</span>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
-              <span class="text-slate-400 truncate max-w-xs bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${inp.selector}</span>
-              <button onclick="copySelectorText('${inp.selector.replace(/'/g, "\\'")}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
+              <span class="text-ds-muted truncate max-w-xs bg-ds-surface-low px-2 py-0.5 rounded border border-ds">${inp.selector}</span>
+              <button type="button" onclick="copySelectorText('${inp.selector.replace(/'/g, "\\'")}')" class="btn-ghost px-2 py-1 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
             </div>
           </div>
         `).join('');
@@ -3342,15 +6398,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const tblList = document.getElementById('elemCatListTables');
       const tables = dom.tables || [];
       if (tblList) {
-        tblList.innerHTML = tables.length === 0 ? '<div class="text-slate-500 italic p-3 text-center text-xs">No data tables detected.</div>' : tables.map(tbl => `
-          <div class="flex items-center justify-between p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-xs gap-3">
+        tblList.innerHTML = tables.length === 0 ? '<div class="text-ds-muted italic p-3 text-center text-xs">No data tables detected.</div>' : tables.map(tbl => `
+          <div class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-ds text-xs gap-3 shadow-xs">
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-purple-950 text-purple-300 border border-purple-700/60">${tbl.rows_count} rows</span>
-              <span class="text-slate-300 truncate">${(tbl.headers || []).join(', ') || 'Table'}</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-purple-50 text-purple-800 border border-purple-200">${tbl.rows_count} rows</span>
+              <span class="text-[#1c1b1b] truncate">${(tbl.headers || []).join(', ') || 'Table'}</span>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
-              <span class="text-slate-400 truncate max-w-xs bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${tbl.selector}</span>
-              <button onclick="copySelectorText('${tbl.selector.replace(/'/g, "\\'")}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
+              <span class="text-ds-muted truncate max-w-xs bg-ds-surface-low px-2 py-0.5 rounded border border-ds">${tbl.selector}</span>
+              <button type="button" onclick="copySelectorText('${tbl.selector.replace(/'/g, "\\'")}')" class="btn-ghost px-2 py-1 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
             </div>
           </div>
         `).join('');
@@ -3360,15 +6416,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const hdList = document.getElementById('elemCatListHeadings');
       const headings = dom.headings || [];
       if (hdList) {
-        hdList.innerHTML = headings.length === 0 ? '<div class="text-slate-500 italic p-3 text-center text-xs">No headings detected.</div>' : headings.map(h => `
-          <div class="flex items-center justify-between p-2.5 bg-slate-950/80 rounded-lg border border-slate-800 text-xs gap-3">
+        hdList.innerHTML = headings.length === 0 ? '<div class="text-ds-muted italic p-3 text-center text-xs">No headings detected.</div>' : headings.map(h => `
+          <div class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-ds text-xs gap-3 shadow-xs">
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-teal-950 text-teal-300 border border-teal-700/60 uppercase">${h.level}</span>
-              <span class="text-slate-200 font-medium truncate">${h.text}</span>
+              <span class="px-1.5 py-0.5 rounded text-[11px] font-mono bg-teal-50 text-teal-800 border border-teal-200 uppercase">${h.level}</span>
+              <span class="text-[#1c1b1b] font-medium truncate">${h.text}</span>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0 font-mono text-[11px]">
-              <span class="text-slate-400 truncate max-w-xs bg-slate-900 px-2 py-0.5 rounded border border-slate-800">${h.selector}</span>
-              <button onclick="copySelectorText('${h.selector.replace(/'/g, "\\'")}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
+              <span class="text-ds-muted truncate max-w-xs bg-ds-surface-low px-2 py-0.5 rounded border border-ds">${h.selector}</span>
+              <button type="button" onclick="copySelectorText('${h.selector.replace(/'/g, "\\'")}')" class="btn-ghost px-2 py-1 rounded text-[11px] transition"><i class="fa-regular fa-copy mr-1"></i> Copy</button>
             </div>
           </div>
         `).join('');
@@ -3404,45 +6460,45 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         const data = await resp.json();
         if (!resp.ok || data.error) {
-          resBox.innerHTML = `<div class="p-3 bg-red-950/60 border border-red-800 rounded-lg text-red-300"><i class="fa-solid fa-circle-xmark mr-1"></i> ${data.error || 'Failed to query selector'}</div>`;
+          resBox.innerHTML = `<div class="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2"><i class="fa-solid fa-circle-xmark text-red-500"></i> <span>${data.error || 'Failed to query selector'}</span></div>`;
           return;
         }
 
         if (data.match_count === 0) {
           resBox.innerHTML = `
-            <div class="p-3 bg-slate-900 border border-slate-800 rounded-lg text-slate-400 flex items-center justify-between">
-              <span><i class="fa-solid fa-circle-info mr-1 text-slate-500"></i> No elements matched selector <code class="font-mono text-amber-300">${selector}</code>.</span>
+            <div class="p-3 bg-ds-surface-low border border-ds rounded-xl text-ds-muted text-xs flex items-center justify-between">
+              <span><i class="fa-solid fa-circle-info mr-1 text-ds-muted"></i> No elements matched selector <code class="font-mono text-ds-accent bg-white px-1.5 py-0.5 rounded border border-ds">${selector}</code>.</span>
             </div>
           `;
           return;
         }
 
         resBox.innerHTML = `
-          <div class="p-3 bg-emerald-950/40 border border-emerald-800/60 rounded-lg space-y-2">
+          <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
             <div class="flex items-center justify-between">
-              <span class="text-emerald-300 font-semibold flex items-center gap-1.5">
-                <i class="fa-solid fa-circle-check"></i> Found ${data.match_count} matching element(s)
+              <span class="text-emerald-800 font-semibold flex items-center gap-1.5 text-xs">
+                <i class="fa-solid fa-circle-check text-emerald-600"></i> Found ${data.match_count} matching element(s)
               </span>
-              <button onclick="copySelectorText('${selector.replace(/'/g, "\\'")}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded text-xs transition">
+              <button onclick="copySelectorText('${selector.replace(/'/g, "\\'")}')" class="btn-ghost px-2.5 py-1 text-xs rounded border border-emerald-300 hover:bg-emerald-100/60 text-emerald-900 transition">
                 <i class="fa-regular fa-copy mr-1"></i> Copy Selector
               </button>
             </div>
             <div class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               ${data.matches.map((m, idx) => `
-                <div class="p-2 bg-slate-950 rounded border border-slate-800/80 font-mono text-[11px] space-y-1">
-                  <div class="flex items-center justify-between text-slate-400">
-                    <span class="text-amber-400 font-bold">&lt;${m.tag}${m.id ? ` id="${m.id}"` : ''}${m.classes && m.classes.length ? ` class="${m.classes.join(' ')}"` : ''}&gt;</span>
-                    <span>Match #${idx + 1}</span>
+                <div class="p-2.5 bg-white rounded-lg border border-ds font-mono text-[11px] space-y-1 shadow-xs text-[#1c1b1b]">
+                  <div class="flex items-center justify-between text-ds-muted">
+                    <span class="text-amber-800 font-bold">&lt;${m.tag}${m.id ? ` id="${m.id}"` : ''}${m.classes && m.classes.length ? ` class="${m.classes.join(' ')}"` : ''}&gt;</span>
+                    <span class="text-[10px]">Match #${idx + 1}</span>
                   </div>
-                  ${m.text ? `<div class="text-slate-200 truncate"><span class="text-slate-500">text:</span> "${m.text}"</div>` : ''}
-                  ${m.attributes && Object.keys(m.attributes).length ? `<div class="text-slate-400 truncate"><span class="text-slate-500">attrs:</span> ${JSON.stringify(m.attributes)}</div>` : ''}
+                  ${m.text ? `<div class="text-[#1c1b1b] truncate"><span class="text-ds-muted">text:</span> "${m.text}"</div>` : ''}
+                  ${m.attributes && Object.keys(m.attributes).length ? `<div class="text-ds-muted truncate"><span class="text-ds-outline">attrs:</span> ${JSON.stringify(m.attributes)}</div>` : ''}
                 </div>
               `).join('')}
             </div>
           </div>
         `;
       } catch (err) {
-        resBox.innerHTML = `<div class="p-3 bg-red-950/60 border border-red-800 rounded-lg text-red-300"><i class="fa-solid fa-circle-xmark mr-1"></i> ${err.message}</div>`;
+        resBox.innerHTML = `<div class="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2"><i class="fa-solid fa-circle-xmark text-red-500"></i> <span>${err.message}</span></div>`;
       }
     }
 
@@ -3527,18 +6583,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     function copyPreviewMarkdown() {
       const r = window.crawledResults ? window.crawledResults[activePreviewIndex] : null;
-      if (!r || !r.markdown) return alert('No markdown to copy');
+      if (!r || !r.markdown) {
+        showToast('No markdown to copy', 'warning');
+        return;
+      }
       navigator.clipboard.writeText(r.markdown).then(() => {
-        alert('Markdown copied to clipboard!');
+        showToast('Markdown copied to clipboard!');
+      }).catch(() => {
+        showToast('Failed to copy to clipboard', 'warning');
       });
     }
 
     function copyPreviewAiJson() {
       const r = window.crawledResults ? window.crawledResults[activePreviewIndex] : null;
       const data = (r && r.ai_data) ? r.ai_data : currentAiData;
-      if (!data) return alert('No AI data to copy');
+      if (!data) {
+        showToast('No AI data to copy', 'warning');
+        return;
+      }
       navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
-        alert('AI JSON copied to clipboard!');
+        showToast('AI JSON copied to clipboard!');
+      }).catch(() => {
+        showToast('Failed to copy to clipboard', 'warning');
       });
     }
 
@@ -3551,6 +6617,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       if (timerBadge) {
         timerBadge.classList.add('hidden');
         timerBadge.classList.remove('inline-flex');
+      }
+      const modalDialog = document.getElementById('previewModalDialog');
+      if (modalDialog && modalDialog.classList.contains('preview-modal-fullscreen')) {
+        modalDialog.classList.remove('preview-modal-fullscreen');
+        const icon = document.getElementById('previewFullscreenIcon');
+        if (icon) icon.className = 'fa-solid fa-expand text-xs';
+        const btn = document.getElementById('previewFullscreenBtn');
+        if (btn) btn.setAttribute('title', 'Toggle Fullscreen');
       }
       document.getElementById('previewModal').classList.add('hidden');
       syncBodyScrollLock();
@@ -3773,6 +6847,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               <div class="flex items-center gap-1.5 shrink-0">
                 <button onclick="fillSearchDomain('${d.domain}')" title="Search this domain" class="btn-ghost px-2.5 py-1.5 rounded-lg text-[11px] font-medium">Search</button>
                 <button onclick="openDossierModal('${d.domain}')" title="Generate dossier" class="btn-ghost px-2.5 py-1.5 rounded-lg text-[11px] font-medium">Dossier</button>
+                <button onclick="openCompetitorModal('${d.domain}')" title="Benchmark against other competitors" class="btn-ghost px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-amber-700 hover:bg-amber-50">Compare</button>
                 <button onclick="promptDeleteDomain('${d.domain}', ${d.total_pages})" title="Delete this domain" class="btn-ghost px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-[#ba1a1a] hover:bg-[#ffdad6]">Delete</button>
                 <button onclick="toggleDomainAccordion(${idx})" class="btn-icon" id="chevronDomain_${idx}" aria-label="Toggle domain pages">
                   <i class="fa-solid ${isFirst ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs"></i>
@@ -3995,29 +7070,67 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }
     }
 
+    const DOSSIER_TYPE_META = {
+      complete_site_report: {
+        hint: 'Best for one site: overview, key pages, offerings, trust signals, and takeaways.',
+        cta: 'Generate complete report',
+      },
+      highlights_best: {
+        hint: 'Highlights strengths, best pages, and why the site stands out.',
+        cta: 'Generate highlights report',
+      },
+      market_research: {
+        hint: 'Category, audience, positioning, and market opportunities from crawl evidence.',
+        cta: 'Generate market research',
+      },
+      technical_audit: {
+        hint: 'Information architecture, content clarity, and improvement ideas (from text crawl).',
+        cta: 'Generate content audit',
+      },
+      competitive_matrix: {
+        hint: 'Select multiple domains for side-by-side comparison tables.',
+        cta: 'Generate competitive matrix',
+      },
+    };
+
+    function syncDossierTypeUI() {
+      const sel = document.getElementById('dossierReportType');
+      const key = sel ? sel.value : 'complete_site_report';
+      const meta = DOSSIER_TYPE_META[key] || DOSSIER_TYPE_META.complete_site_report;
+      const hint = document.getElementById('dossierTypeHint');
+      const cta = document.getElementById('btnGenerateDossierLabel');
+      if (hint) hint.textContent = meta.hint;
+      if (cta) cta.textContent = meta.cta;
+    }
+
     function openDossierModal(preselectedDomain) {
       const container = document.getElementById('dossierDomainCheckboxes');
       if (!container) return;
 
       if (!storedDomainsList || storedDomainsList.length === 0) {
-        container.innerHTML = '<span class="text-slate-500 text-xs italic">No domains stored yet. Crawl at least one website first.</span>';
+        container.innerHTML = '<span class="text-ds-muted text-xs italic">No domains stored yet. Crawl at least one website first.</span>';
       } else {
         let html = '';
+        const singleDefault = Boolean(preselectedDomain);
         storedDomainsList.forEach((d) => {
-          const isChecked = preselectedDomain ? (d.domain === preselectedDomain) : true;
+          const isChecked = preselectedDomain ? (d.domain === preselectedDomain) : !singleDefault;
           html += `
-            <label class="flex items-center gap-2 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg border border-slate-700/80 cursor-pointer text-xs transition">
+            <label class="dossier-domain-chip">
               <input type="checkbox" name="dossierDomain" value="${d.domain}" ${isChecked ? 'checked' : ''}
-                     onchange="updateDossierSelectedCount()"
-                     class="accent-purple-500 rounded">
-              <span class="font-mono text-slate-200">${d.domain}</span>
-              <span class="text-[11px] text-slate-500">(${d.total_pages}p)</span>
+                     onchange="updateDossierSelectedCount()">
+              <span class="domain-name">${d.domain}</span>
+              <span class="text-[11px] text-ds-muted">(${d.total_pages}p)</span>
             </label>
           `;
         });
         container.innerHTML = html;
       }
 
+      const typeSel = document.getElementById('dossierReportType');
+      if (typeSel) {
+        typeSel.value = preselectedDomain ? 'complete_site_report' : typeSel.value;
+      }
+      syncDossierTypeUI();
       updateDossierSelectedCount();
       document.getElementById('dossierResultArea').classList.add('hidden');
       document.getElementById('dossierError').classList.add('hidden');
@@ -4049,6 +7162,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }
 
       const model = document.getElementById('dossierAiModel').value;
+      const dossierType = document.getElementById('dossierReportType').value;
       const customFocus = document.getElementById('dossierCustomFocus').value.trim();
 
       const loading = document.getElementById('dossierLoading');
@@ -4073,6 +7187,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             domains: checked,
+            dossier_type: dossierType,
             model: model,
             custom_focus: customFocus || null
           })
@@ -4112,13 +7227,44 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }
     }
 
-    function exportDossier(fmt) {
-      if (!currentDossierData) return alert('Generate a dossier first.');
-      const checked = currentDossierData.competitors_analyzed || [];
-      const model = currentDossierData.model_used || 'moonshotai/kimi-k3';
-      const domainsParam = checked.map(d => encodeURIComponent(d)).join('&domains=');
-      const exportUrl = `/api/v1/dossier/export?domains=${domainsParam}&format=${fmt}&model=${encodeURIComponent(model)}`;
-      window.open(exportUrl, '_blank');
+    async function exportDossier(fmt) {
+      const md = currentDossierData && (currentDossierData.markdown || currentDossierData.dossier_markdown);
+      if (!md) return alert('Generate a dossier first.');
+
+      const domains = currentDossierData.competitors_analyzed || currentDossierData.domains_analyzed || ['report'];
+      const slug = domains.slice(0, 2).join('_').replace(/[^a-zA-Z0-9._-]/g, '_') || 'report';
+      const ext = fmt === 'pdf' ? 'pdf' : 'md';
+
+      try {
+        const resp = await fetch('/api/v1/dossier/export-content', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            markdown: md,
+            export_format: fmt,
+            title: 'Website Intelligence Report',
+          }),
+        });
+        if (!resp.ok) {
+          let detail = resp.statusText;
+          try {
+            const errJson = await resp.json();
+            detail = errJson.detail || detail;
+          } catch (_) { /* ignore */ }
+          throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dossier_${slug}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Export failed: ' + err.message);
+      }
     }
 
     function copyDossierMarkdown() {
@@ -4183,6 +7329,40 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       }
     }
 
+    function renderAskAnswer(raw) {
+      const text = String(raw || '').replace(/\\r\\n/g, '\\n').trim();
+      const lines = text.split('\\n');
+      const blocks = [];
+      let list = [];
+      function flushList() {
+        if (!list.length) return;
+        blocks.push('<ol>' + list.map(item => '<li>' + item + '</li>').join('') + '</ol>');
+        list = [];
+      }
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          flushList();
+          return;
+        }
+        const numbered = trimmed.match(/^\\d+\\.\\s+(.*)$/);
+        const inline = formatAskInline(numbered ? numbered[1] : trimmed);
+        if (numbered) list.push(inline);
+        else {
+          flushList();
+          blocks.push('<p>' + inline + '</p>');
+        }
+      });
+      flushList();
+      return blocks.join('') || '<p>' + formatAskInline(text) + '</p>';
+    }
+
+    function formatAskInline(value) {
+      return escapeHtml(value)
+        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\[(\\d+)\\]/g, '<sup>[$1]</sup>');
+    }
+
     async function runAskAi() {
       const q = document.getElementById('askQuestion').value.trim();
       if (!q) return alert('Please enter a question');
@@ -4215,16 +7395,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         if (loading) loading.classList.add('hidden');
         if (content) content.classList.remove('hidden');
 
-        answerText.innerText = data.answer || 'No answer generated.';
+        answerText.innerHTML = renderAskAnswer(data.answer || 'No answer generated.');
+        const cacheBadge = document.getElementById('askCacheBadge');
+        if (cacheBadge) {
+          if (data.cached) {
+            cacheBadge.textContent = 'Saved answer — matched a previous question, model was not called.';
+            cacheBadge.classList.remove('hidden');
+          } else {
+            cacheBadge.textContent = '';
+            cacheBadge.classList.add('hidden');
+          }
+        }
 
         if (data.sources && data.sources.length > 0) {
           let sHtml = '';
           data.sources.forEach(s => {
-            sHtml += `<a href="${s.url}" target="_blank" class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-teal-300 rounded-md text-[11px] transition flex items-center gap-1.5"><i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i> ${s.title || s.url}</a>`;
+            sHtml += `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer" class="chip-export">${escapeHtml(s.title || s.url)}</a>`;
           });
           sourcesList.innerHTML = sHtml;
         } else {
-          sourcesList.innerHTML = '<span class="text-slate-500 text-xs">No direct citations available.</span>';
+          sourcesList.innerHTML = '<span class="text-ds-muted text-xs">No direct citations available.</span>';
         }
       } catch (err) {
         if (askTimer) {
@@ -4242,6 +7432,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     window.addEventListener('DOMContentLoaded', () => {
       loadHistory();
       loadCustomPresets();
+      updateSchedulesBadgeCount();
       applyCrawlPreset('rag_ingest');
       syncSlidersFromInputs();
       syncGuardrailsFromInputs();
@@ -4263,7 +7454,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
 async def dashboard():
     """Embedded interactive Web UI dashboard."""
-    return DASHBOARD_HTML.replace("__BOT_VERSION__", settings.bot_version)
+    return (
+        DASHBOARD_HTML
+        .replace("__BOT_VERSION__", settings.bot_version)
+        .replace("__GOOGLE_FONTS__", generate_google_fonts_link())
+        .replace("__ROOT_THEME_CSS__", generate_root_css(DEFAULT_THEME_ID))
+        .replace("__THEMES_JSON__", get_themes_json())
+    )
 
 
 @app.get("/favicon.ico", include_in_schema=False)

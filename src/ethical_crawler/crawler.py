@@ -335,6 +335,7 @@ class EthicalCrawler:
                 url,
                 rpa_steps=self.request.rpa_steps,
                 auto_dismiss_modals=self.request.auto_dismiss_modals,
+                capture_screenshot=self.request.capture_screenshot,
             )
 
         # Default HTTP strategy
@@ -357,6 +358,7 @@ class EthicalCrawler:
                     url,
                     rpa_steps=self.request.rpa_steps,
                     auto_dismiss_modals=self.request.auto_dismiss_modals,
+                    capture_screenshot=self.request.capture_screenshot,
                 )
                 # If browser succeeded with better content, use it
                 if (

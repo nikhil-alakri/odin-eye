@@ -182,6 +182,309 @@ class StorageExporter:
         return "\n".join(lines)
 
     @staticmethod
+    def _pdf_escape(text: str) -> str:
+        cleaned = (
+            text.replace("\u20b9", "Rs.")
+            .replace("\u2014", " - ")
+            .replace("\u2013", "-")
+            .replace("\u2011", "-")
+            .replace("\u2018", "'")
+            .replace("\u2019", "'")
+            .replace("\u201c", '"')
+            .replace("\u201d", '"')
+            .replace("\u2026", "...")
+            .replace("\u00a0", " ")
+        )
+        cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+        cleaned = re.sub(r"\]\([^)]*\)", "", cleaned)
+        cleaned = cleaned.encode("latin-1", "replace").decode("latin-1")
+        return (
+            cleaned.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+
+    @staticmethod
+    def _md_inline(text: str) -> str:
+        """Turn a small markdown subset into ReportLab markup."""
+        safe = StorageExporter._pdf_escape(text.strip())
+        safe = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", safe)
+        safe = re.sub(r"(?<!\*)\*(.+?)\*(?!\*)", r"<i>\1</i>", safe)
+        safe = re.sub(r"`(.+?)`", r'<font face="Courier">\1</font>', safe)
+        return safe
+
+    @classmethod
+    def to_dossier_pdf(
+        cls,
+        markdown: str,
+        title: str,
+        target_path_or_buf: str | Path | io.BytesIO,
+    ) -> bytes:
+        """Render a website intelligence report as a readable, sectioned PDF."""
+        if not REPORTLAB_AVAILABLE:
+            raise RuntimeError(
+                "ReportLab is required for PDF export. Install with 'pip install reportlab'"
+            )
+
+        if isinstance(target_path_or_buf, (str, Path)):
+            buf = io.BytesIO()
+            save_to_file = True
+            out_file_path = Path(target_path_or_buf)
+        else:
+            buf = target_path_or_buf
+            save_to_file = False
+            out_file_path = None
+
+        ink = colors.HexColor("#1c1b1b")
+        muted = colors.HexColor("#444932")
+        olive = colors.HexColor("#536600")
+        lime = colors.HexColor("#d4ff00")
+        teal = colors.HexColor("#00677f")
+        line = colors.HexColor("#e5e2e1")
+        wash = colors.HexColor("#f6f3f2")
+        card = colors.HexColor("#fafafa")
+
+        page_width, page_height = letter
+        margin = 42
+
+        def _draw_page(canvas, doc):
+            canvas.saveState()
+            canvas.setFillColor(lime)
+            canvas.rect(0, page_height - 8, page_width, 8, fill=1, stroke=0)
+            canvas.setFillColor(ink)
+            canvas.setFont("Helvetica-Bold", 8)
+            canvas.drawString(margin, page_height - 24, "CRAWL // ETHIC")
+            canvas.setFillColor(muted)
+            canvas.setFont("Helvetica", 8)
+            canvas.drawRightString(page_width - margin, page_height - 24, "Website Intelligence Report")
+            canvas.setStrokeColor(line)
+            canvas.setLineWidth(0.6)
+            canvas.line(margin, 32, page_width - margin, 32)
+            canvas.setFillColor(muted)
+            canvas.setFont("Helvetica", 8)
+            canvas.drawString(margin, 18, "Generated from crawled knowledge")
+            canvas.drawRightString(page_width - margin, 18, f"Page {doc.page}")
+            canvas.restoreState()
+
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=letter,
+            rightMargin=margin,
+            leftMargin=margin,
+            topMargin=42,
+            bottomMargin=46,
+        )
+        content_width = page_width - (margin * 2)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "DossierTitle",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=20,
+            leading=24,
+            textColor=ink,
+            alignment=0,
+            spaceAfter=4,
+        )
+        meta_style = ParagraphStyle(
+            "DossierMeta",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=13,
+            textColor=muted,
+            spaceAfter=8,
+        )
+        h2_style = ParagraphStyle(
+            "DossierH2",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=13,
+            leading=16,
+            textColor=olive,
+            spaceBefore=12,
+            spaceAfter=6,
+        )
+        h3_style = ParagraphStyle(
+            "DossierH3",
+            parent=styles["Heading3"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=14,
+            textColor=ink,
+            spaceBefore=2,
+            spaceAfter=4,
+        )
+        body_style = ParagraphStyle(
+            "DossierBody",
+            parent=styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=13.5,
+            textColor=ink,
+            spaceAfter=3,
+        )
+        bullet_style = ParagraphStyle(
+            "DossierBullet",
+            parent=body_style,
+            leftIndent=12,
+            bulletIndent=0,
+            spaceAfter=2,
+        )
+        quote_style = ParagraphStyle(
+            "DossierQuote",
+            parent=body_style,
+            textColor=teal,
+            leftIndent=8,
+            borderPadding=4,
+        )
+        cell_style = ParagraphStyle(
+            "DossierCell",
+            parent=body_style,
+            fontSize=8,
+            leading=11,
+            spaceAfter=0,
+        )
+        head_cell = ParagraphStyle(
+            "DossierHeadCell",
+            parent=cell_style,
+            fontName="Helvetica-Bold",
+            textColor=ink,
+        )
+
+        story: list[Any] = []
+        story.append(Spacer(1, 8))
+        story.append(HRFlowable(width="72", thickness=4, color=lime, spaceAfter=8))
+        display_title = title
+        lines = [ln.rstrip() for ln in (markdown or "").splitlines()]
+        if lines and lines[0].startswith("# "):
+            display_title = lines[0][2:].strip() or title
+            lines = lines[1:]
+        story.append(Paragraph(cls._md_inline(display_title), title_style))
+        story.append(
+            Paragraph("Readable briefing built from stored crawl pages.", meta_style)
+        )
+
+        def flush_table(rows: list[list[str]]) -> None:
+            if not rows:
+                return
+            header = rows[0]
+            body_rows = [row for row in rows[1:] if not all(set(c) <= set(":- ") for c in row)]
+            col_count = max(len(header), max((len(r) for r in body_rows), default=0))
+            if col_count == 0:
+                return
+            col_w = content_width / col_count
+            data = []
+            data.append(
+                [Paragraph(cls._md_inline(cell or ""), head_cell) for cell in header[:col_count]]
+            )
+            for row in body_rows:
+                padded = row + [""] * (col_count - len(row))
+                data.append(
+                    [Paragraph(cls._md_inline(cell or ""), cell_style) for cell in padded[:col_count]]
+                )
+            table = Table(data, colWidths=[col_w] * col_count, repeatRows=1)
+            table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), lime),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), ink),
+                        ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+                        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, wash]),
+                        ("GRID", (0, 0), (-1, -1), 0.4, line),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                        ("TOPPADDING", (0, 0), (-1, -1), 5),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ]
+                )
+            )
+            story.append(Spacer(1, 4))
+            story.append(table)
+            story.append(Spacer(1, 8))
+
+        table_rows: list[list[str]] = []
+        card_open = False
+
+        def close_card() -> None:
+            nonlocal card_open
+            card_open = False
+
+        i = 0
+        while i < len(lines):
+            raw = lines[i].strip()
+            indent = len(lines[i]) - len(lines[i].lstrip(" "))
+            if raw.startswith("|") and raw.endswith("|"):
+                cells = [c.strip() for c in raw.strip("|").split("|")]
+                table_rows.append(cells)
+                i += 1
+                continue
+            if table_rows:
+                flush_table(table_rows)
+                table_rows = []
+
+            if not raw:
+                i += 1
+                continue
+            if raw.startswith("## "):
+                close_card()
+                story.append(Paragraph(cls._md_inline(raw[3:]), h2_style))
+                story.append(HRFlowable(width="100%", thickness=1, color=lime, spaceAfter=6))
+            elif raw.startswith("### "):
+                close_card()
+                card_open = True
+                banner = Table(
+                    [[Paragraph(cls._md_inline(raw[4:]), h3_style)]],
+                    colWidths=[content_width],
+                )
+                banner.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, -1), wash),
+                            ("BOX", (0, 0), (-1, -1), 0.6, line),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                            ("TOPPADDING", (0, 0), (-1, -1), 6),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                            ("LINEBEFORE", (0, 0), (0, -1), 4, olive),
+                        ]
+                    )
+                )
+                story.append(Spacer(1, 6))
+                story.append(banner)
+            elif raw.startswith(">"):
+                story.append(Paragraph(cls._md_inline(raw.lstrip("> ").strip()), quote_style))
+            elif raw.startswith(("- ", "* ")):
+                bullet = bullet_style
+                if indent >= 2:
+                    bullet = ParagraphStyle(
+                        "DossierBulletNested",
+                        parent=bullet_style,
+                        leftIndent=26,
+                        textColor=muted,
+                    )
+                story.append(Paragraph(cls._md_inline(raw[2:]), bullet, bulletText="-"))
+            elif re.match(r"^\d+\.\s", raw):
+                story.append(Paragraph(cls._md_inline(raw), bullet_style))
+            else:
+                style = body_style
+                if card_open and raw.startswith("*") and raw.endswith("*"):
+                    style = meta_style
+                story.append(Paragraph(cls._md_inline(raw), style))
+            i += 1
+
+        if table_rows:
+            flush_table(table_rows)
+
+        doc.build(story, onFirstPage=_draw_page, onLaterPages=_draw_page)
+        pdf_bytes = buf.getvalue()
+        if save_to_file and out_file_path:
+            out_file_path.parent.mkdir(parents=True, exist_ok=True)
+            out_file_path.write_bytes(pdf_bytes)
+        return pdf_bytes
+
+    @staticmethod
     def to_pdf(
         results: list[CrawlResult],
         target_path_or_buf: str | Path | io.BytesIO,
@@ -336,38 +639,46 @@ class StorageExporter:
             )
             story.append(Spacer(1, 4))
 
-            # Convert markdown content into formatted paragraphs
             clean_text = r.markdown.strip() if r.markdown else "(No content extracted)"
-            paragraphs = clean_text.split("\n\n")
-            # Allow up to 100 paragraphs for single page scrape, 40 for multi-page crawl
-            max_para = 100 if len(results) == 1 else 40
-            for p in paragraphs[:max_para]:
-                p_text = p.strip()
+            # Line-oriented so markdown tables and long reports are not dropped
+            # after a small paragraph cap, and one bad line cannot fail the PDF.
+            raw_lines = clean_text.splitlines()
+            max_lines = 800 if len(results) == 1 else 240
+            for raw_line in raw_lines[:max_lines]:
+                p_text = raw_line.strip()
                 if not p_text:
+                    story.append(Spacer(1, 4))
                     continue
-
-                # Strip markdown links to plain text
-                p_text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", p_text)
-                # Escape XML entities for ReportLab
-                safe_p = p_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-                # Handle headings
-                if safe_p.startswith("#"):
-                    level = len(safe_p) - len(safe_p.lstrip("#"))
-                    heading_text = safe_p.lstrip("#").strip()
-                    h_size = max(10, 14 - level)
-                    story.append(
-                        Paragraph(
-                            f"<b>{heading_text}</b>",
-                            ParagraphStyle(
-                                "H", parent=body_style, fontSize=h_size, leading=h_size + 3
-                            ),
+                p_text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", p_text)
+                p_text = p_text.encode("latin-1", "replace").decode("latin-1")
+                safe_p = (
+                    p_text.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                )
+                try:
+                    if safe_p.startswith("#"):
+                        level = len(safe_p) - len(safe_p.lstrip("#"))
+                        heading_text = safe_p.lstrip("#").strip() or "Section"
+                        h_size = max(10, 14 - min(level, 4))
+                        story.append(
+                            Paragraph(
+                                f"<b>{heading_text}</b>",
+                                ParagraphStyle(
+                                    f"H{level}",
+                                    parent=body_style,
+                                    fontSize=h_size,
+                                    leading=h_size + 3,
+                                    spaceBefore=6,
+                                ),
+                            )
                         )
-                    )
-                else:
-                    story.append(Paragraph(safe_p, body_style))
-
-                story.append(Spacer(1, 3))
+                    else:
+                        story.append(Paragraph(safe_p, body_style))
+                except Exception:
+                    plain = safe_p.replace("<", "").replace(">", "")[:500]
+                    story.append(Paragraph(plain or "(line skipped)", body_style))
+                story.append(Spacer(1, 2))
 
             story.append(Spacer(1, 10))
             story.append(
@@ -479,7 +790,15 @@ class StorageExporter:
         """
         fmt = fmt.lower().strip(".")
         if fmt == "pdf":
-            pdf_bytes = cls.to_pdf(results, io.BytesIO())
+            is_dossier = bool(metadata and metadata.get("dossier"))
+            if is_dossier and results:
+                pdf_bytes = cls.to_dossier_pdf(
+                    results[0].markdown or "",
+                    results[0].title or "Website Intelligence Report",
+                    io.BytesIO(),
+                )
+            else:
+                pdf_bytes = cls.to_pdf(results, io.BytesIO())
             return pdf_bytes, "application/pdf", "crawl_results.pdf"
         elif fmt in ("md", "markdown"):
             md_text = cls.to_markdown(results)

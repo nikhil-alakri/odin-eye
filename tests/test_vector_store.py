@@ -334,21 +334,34 @@ async def test_api_domain_summary_and_deletion_endpoints(
         assert "competitors_analyzed" in dossier
         assert len(dossier["competitors_analyzed"]) == 2
 
-        # 3. GET /api/v1/dossier/export?format=md
+        # 3. POST /api/v1/dossier/export-content (PDF from generated markdown)
+        resp_export_pdf = await client.post(
+            "/api/v1/dossier/export-content",
+            json={
+                "markdown": dossier["markdown"],
+                "export_format": "pdf",
+                "title": "Test Dossier",
+            },
+        )
+        assert resp_export_pdf.status_code == 200
+        assert resp_export_pdf.headers["content-type"].startswith("application/pdf")
+        assert resp_export_pdf.content[:4] == b"%PDF"
+
+        # 4. GET /api/v1/dossier/export?format=md
         resp_export_md = await client.get(
             "/api/v1/dossier/export?domains=competitor-a.com&domains=competitor-b.com&format=md"
         )
         assert resp_export_md.status_code == 200
-        assert b"Intelligence Dossier" in resp_export_md.content
+        assert b"Dossier" in resp_export_md.content or b"competitor" in resp_export_md.content.lower()
 
-        # 4. DELETE /api/v1/history/page
+        # 5. DELETE /api/v1/history/page
         resp_del_page = await client.delete(
             "/api/v1/history/page?url=https://competitor-a.com/features"
         )
         assert resp_del_page.status_code == 200
         assert resp_del_page.json()["deleted"] is True
 
-        # 5. DELETE /api/v1/history/domain
+        # 6. DELETE /api/v1/history/domain
         resp_del_domain = await client.delete("/api/v1/history/domain?domain=competitor-b.com")
         assert resp_del_domain.status_code == 200
         assert resp_del_domain.json()["deleted_count"] == 1

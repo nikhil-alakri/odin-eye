@@ -5,9 +5,13 @@ capabilities for dynamic SPAs and modern web apps.
 """
 
 import asyncio
+from datetime import datetime, timezone
+import hashlib
 import logging
+from pathlib import Path
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from ethical_crawler.config import get_settings
 from ethical_crawler.engines.base import CrawlEngine
@@ -244,6 +248,31 @@ class BrowserEngine(CrawlEngine):
 
             internal_links, external_links = LinkExtractor.extract_links(raw_html, final_url)
 
+            screenshot_path = None
+            screenshot_url = None
+            if kwargs.get("capture_screenshot", False):
+                try:
+                    domain_clean = urlparse(final_url).netloc.lower().replace(":", "_") or "unknown"
+                    url_hash = hashlib.md5(final_url.encode("utf-8")).hexdigest()[:10]
+                    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+                    filename = f"{url_hash}_{timestamp_str}.jpg"
+
+                    target_dir = Path("data/screenshots") / domain_clean
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    target_file = target_dir / filename
+
+                    await page.screenshot(
+                        path=str(target_file),
+                        full_page=True,
+                        type="jpeg",
+                        quality=80,
+                    )
+                    screenshot_path = str(target_file)
+                    screenshot_url = f"/api/v1/screenshots/file/{domain_clean}/{filename}"
+                    logger.info("Captured full-page screenshot at %s", screenshot_path)
+                except Exception as sc_err:
+                    logger.warning("Failed to capture screenshot for %s: %s", final_url, sc_err)
+
             return CrawlResult(
                 url=url,
                 final_url=final_url,
@@ -262,6 +291,8 @@ class BrowserEngine(CrawlEngine):
                 rpa_logs=rpa_logs,
                 network_calls=captured_api_calls,
                 dom_elements=dom_elements,
+                screenshot_path=screenshot_path,
+                screenshot_url=screenshot_url,
             )
 
         except Exception as exc:

@@ -136,7 +136,14 @@ async def test_api_scrape_endpoint(monkeypatch, sample_result: CrawlResult):
 
     from ethical_crawler.crawler import EthicalCrawler
 
+    upserted_calls = []
+
+    class MockStore:
+        def upsert_page(self, res, ai_data=None):
+            upserted_calls.append((res, ai_data))
+
     monkeypatch.setattr(EthicalCrawler, "run", mock_crawler_run)
+    monkeypatch.setattr("ethical_crawler.vector_store.get_vector_store", lambda: MockStore())
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -153,6 +160,8 @@ async def test_api_scrape_endpoint(monkeypatch, sample_result: CrawlResult):
         assert data["success"] is True
         assert data["result"]["title"] == "Test Article Title"
         assert "Main Article Heading" in data["result"]["markdown"]
+        assert len(upserted_calls) == 1
+        assert upserted_calls[0][0].url == "https://example.com/blog/test"
 
 
 @pytest.mark.asyncio

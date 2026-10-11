@@ -72,6 +72,8 @@ class CrawlResult(BaseModel):
     rpa_logs: list[str] = Field(default_factory=list)
     network_calls: list[dict[str, Any]] = Field(default_factory=list)
     dom_elements: dict[str, Any] = Field(default_factory=dict)
+    screenshot_path: str | None = None
+    screenshot_url: str | None = None
 
 
 class NetworkCall(BaseModel):
@@ -147,6 +149,9 @@ class CrawlRequest(BaseModel):
     )
     auto_dismiss_modals: bool = Field(
         default=True, description="Automatically dismiss common cookie and dialog banners"
+    )
+    capture_screenshot: bool = Field(
+        default=False, description="Capture full-page screenshot during browser crawl"
     )
 
 
@@ -246,16 +251,34 @@ class StructuredExtractionResult(BaseModel):
 
 
 class MarketDossierRequest(BaseModel):
-    """Parameters for generating an executive market intelligence dossier."""
+    """Parameters for generating a website intelligence dossier from crawled knowledge."""
 
-    domains: list[str] = Field(..., description="Target domains to analyze and compare")
+    domains: list[str] = Field(..., description="Target domains to analyze")
+    dossier_type: str = Field(
+        default="complete_site_report",
+        description=(
+            "Report template: complete_site_report, market_research, highlights_best, "
+            "technical_audit, competitive_matrix"
+        ),
+    )
     model: str = Field(
         default="moonshotai/kimi-k3",
-        description="NVIDIA NIM model to synthesize the multi-site dossier",
+        description="NVIDIA NIM model to synthesize the dossier",
     )
     custom_focus: str | None = Field(
         default=None, description="Optional custom questions or focus areas"
     )
+
+
+class DossierExportRequest(BaseModel):
+    """Export an already-generated dossier markdown to PDF or other formats."""
+
+    markdown: str = Field(..., min_length=1, description="Dossier body in Markdown")
+    export_format: str = Field(
+        default="pdf",
+        description="Output format: pdf, md, or txt",
+    )
+    title: str = Field(default="Website Intelligence Report")
 
 
 class MarketDossierResult(BaseModel):

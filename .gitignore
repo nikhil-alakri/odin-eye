@@ -50,3 +50,14 @@ test_output.*
 *.swo
 .DS_Store
 
+
+# Session and temporary files
+:memory:.ses
+tmp/
+scratch/
+
+# Local Agent Skills library
+.agents/skills/
+data/ask_cache.json
+data/schedules.json
+data/screenshots/
