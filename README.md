@@ -1,223 +1,249 @@
-# 🕷️ Ethical AI-Native Web Crawler & Reverse-Engineering Platform
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nikhil-alakri/odin-eye/main/data/screenshots/banner.png" alt="Odin-Eye Banner" width="100%" onerror="this.style.display='none'"/>
+</p>
 
-A production-ready, open-source, ethical web crawler, full-stack reverse-engineering suite, and intelligence framework built in Python 3.12+, strictly adhering to the **4 Rules of Ethical Web Crawling** with modern AI-native and multimodal extraction capabilities (compatible with **NVIDIA NIM** and **OpenAI** APIs).
+<h1 align="center">👁️ Odin-Eye</h1>
 
----
+<p align="center">
+  <strong>The All-Seeing Ethical AI Crawler & Autonomous Full-Stack Reverse-Engineering Platform</strong>
+</p>
 
-## 📚 Quick Documentation Index
+<p align="center">
+  <a href="https://github.com/nikhil-alakri/odin-eye/stargazers"><img src="https://img.shields.io/github/stars/nikhil-alakri/odin-eye?style=for-the-badge&logo=github&color=38bdf8" alt="GitHub Stars"/></a>
+  <a href="https://github.com/nikhil-alakri/odin-eye/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-emerald.svg?style=for-the-badge" alt="License"/></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12-blue.svg?style=for-the-badge&logo=python" alt="Python Version"/></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115+-009688.svg?style=for-the-badge&logo=fastapi" alt="FastAPI"/></a>
+  <a href="https://integrate.api.nvidia.com/"><img src="https://img.shields.io/badge/NVIDIA-NIM%20Vision-76b900.svg?style=for-the-badge&logo=nvidia" alt="NVIDIA NIM"/></a>
+  <a href="https://playwright.dev/"><img src="https://img.shields.io/badge/Playwright-Dual--Engine-45ba4b.svg?style=for-the-badge&logo=playwright" alt="Playwright"/></a>
+</p>
 
-- **[📖 USAGE GUIDE (Why, When, Where, How, Time-Saving)](USAGE.md)**: Deep dive into all architectural capabilities, time savings, and step-by-step workflows.
-- **[❓ FREQUENTLY ASKED QUESTIONS (FAQ)](FAQ.md)**: Answers regarding ethics, AI vision models, data preservation, and diff alerts.
-- **[📁 Architecture & Feature Plans](Raw/features/)**: Detailed implementation plans, specs, and walkthroughs for every system feature.
-
----
-
-## 🌟 Core System Capabilities
-
-### 1. The 4 Rules of Ethical Web Crawling
-- **Rule 1: Check `robots.txt`**: Automatically verifies allowed/disallowed paths and respects `Crawl-delay` and `Sitemap` declarations with in-memory TTL caching.
-- **Rule 2: Politeness Delay & Rate Limiting**: Enforces per-domain delays, concurrency semaphores, and exponential backoff, honoring HTTP 429 `Retry-After`.
-- **Rule 3: Identifiable User-Agent**: Sends transparent bot identification with version, documentation link, and contact email.
-- **Rule 4: Sitemap Discovery**: Automatically parses XML and gzipped (`.xml.gz`) sitemaps for structured, non-invasive URL discovery.
-
-### 2. Autonomous Visual Reverse-Engineering & Blueprint Synthesis
-- **Domain Archetype Classification**: Identifies platform categories (Media & Studio Production, E-Commerce, DevTools, Enterprise SaaS).
-- **Pixel Palette Extraction**: Samples screenshot pixels using Pillow (PIL) to extract authentic brand primary, accent, surface, and typography colors.
-- **Relational Data Architecture (ERD)**: Infers complete backend database models with primary keys, foreign keys, data types, and multiplicities.
-- **Inferred REST API Contracts**: Synthesizes endpoints, HTTP methods, headers, query params, request bodies, and expected responses.
-- **Frontend Component Hierarchy**: Maps Atomic Design layouts into Organisms, Molecules, and Atoms.
-- **Boardroom-Grade Executive PDF Export**: Assembles a publication-ready 6-page boardroom PDF report with clean typography and vector wireframes.
-
-### 3. Scheduled Crawling, Content Diff Engine & Alerts
-- **Cron-Scheduled Background Crawling**: Recurring crawlers monitor key pages on customizable cron intervals.
-- **Normalized Content Diffing**: Strips dynamic noise, timestamps, and CSRF tokens to compute genuine content deltas.
-- **Instant Webhook Alerts**: Dispatches formatted diff summaries to Slack or Discord when changes exceed configured thresholds.
-
-### 4. Interactive CSS Element Selector & Visual Picker
-- **Point-and-Click Selector Tool**: Safely loads websites in a sandboxed iframe with scripts stripped.
-- **Resilient Selector Engine**: Calculates optimal CSS selectors and verifies matching element counts live in the browser.
-
-### 5. Competitive Intelligence & Technology Profiler
-- **Tech Stack Profiling**: Detects 40+ technologies across frameworks (React, Next.js, Vue), CMS (WordPress, Shopify), analytics (PostHog, GA4), and infrastructure.
-- **Cross-Domain Competitive Matrix**: Compares multiple competitor websites side-by-side.
-
-### 6. Embedded ChromaDB Vector Knowledge Base & Local RAG Q&A
-- **Zero-Network Cache**: Stores crawled pages locally in ChromaDB; recurring queries resolve in 1ms with zero network requests.
-- **Semantic Vector Search**: Search crawled knowledge by concept rather than just keywords.
-- **Local RAG Q&A ("Chat with Crawled Sites")**: Ask natural language questions answered strictly from stored page context with source citations.
-- **Strict Database Preservation**: Non-destructive upsert architecture ensures historical data is never wiped or lost.
+<p align="center">
+  <a href="#-quick-tour--why-odin-eye">Quick Tour</a> •
+  <a href="#-key-features">Key Features</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-visual-blueprints--reverse-engineering">Visual Blueprints</a> •
+  <a href="#-interactive-dashboard">UI Dashboard</a> •
+  <a href="#-api-reference">REST API</a> •
+  <a href="USAGE.md">Usage Guide</a> •
+  <a href="FAQ.md">FAQ</a>
+</p>
 
 ---
 
-## 🚀 Quick Start
+## ⚡ What is Odin-Eye?
+
+In Norse myth, **Odin** sacrificed an eye for the cosmic ability to **see past all illusions**.
+
+**Odin-Eye** brings that power to web engineering. It looks past the surface rendered UI of any modern web application and autonomously reconstructs what lies beneath:
+- 🏛️ **Backend Database Architecture**: Inferred Relational Schemas (ERD) with tables, foreign keys, and constraints.
+- 🔌 **REST API Contracts**: Inferred endpoints, query params, request bodies, and JSON responses.
+- 🎨 **Authentic Design Systems**: Real dominant color palettes sampled directly from pixels (via PIL) and Atomic Design hierarchy (Organisms &rarr; Molecules &rarr; Atoms).
+- 📊 **Boardroom-Ready Executive PDFs**: Publication-grade 6-page technical dossiers ready for CTOs and founders.
+- 🛡️ **Guaranteed Ethical Crawling**: Built-in adherence to the 4 Ethical Crawling Rules (strict `robots.txt`, concurrency semaphores, polite delays, and transparent bot headers).
+- 🧠 **Local Air-Gapped RAG**: Embedded ChromaDB vector memory for offline semantic search and citation-backed Q&A.
+
+---
+
+## 🌟 Architecture at a Glance
+
+```
+                                  [ Target Web App ]
+                                          │
+                  ┌───────────────────────┴───────────────────────┐
+                  ▼                                               ▼
+         [ Fast Async Engine ]                          [ Playwright Browser ]
+           (httpx / 100ms)                            (JS SPAs / Screenshots)
+                  │                                               │
+                  └───────────────────────┬───────────────────────┘
+                                          │
+                                 [ Clean & Filter ]
+                           (Stripped Ads, Modals, Navbars)
+                                          │
+                  ┌───────────────────────┼───────────────────────┐
+                  ▼                       ▼                       ▼
+          [ Pixel Palette ]       [ Domain Profiler ]       [ Vector Store ]
+            (PIL Colorways)      (ERD & API Synthesis)      (Local ChromaDB)
+                  │                       │                       │
+                  └───────────────────────┼───────────────────────┘
+                                          │
+                                          ▼
+                      [ Executive Boardroom PDF Report ]
+                         (Exact 6-Page Vector Dossier)
+```
+
+---
+
+## 🚀 Key Features
+
+| Capability | Description | Time Saved |
+|:---|:---|:---:|
+| **🏛️ Autonomous Visual Reverse-Engineering** | Decomposes screenshots, detects domain archetypes (*Studio Production, E-Commerce, DevTools, SaaS*), and synthesizes ERDs, APIs, and Atomic wireframes. | **99%** *(10s vs 2 wks)* |
+| **🛡️ 4 Rules of Ethical Crawling** | Automatic `robots.txt` discovery & TTL caching, politeness delays, HTTP 429 `Retry-After` backoff, and transparent User-Agent headers. | **Built-in Compliance** |
+| **🔄 Scheduled Crawling & Diff Alerts** | Background cron jobs monitor target URLs, filter out dynamic DOM noise, and deliver instant Slack/Discord webhook alerts. | **100% Automated** |
+| **🎯 Point-and-Click Selector Picker** | Interactive sandboxed iframe visual picker that isolates unique, resilient CSS selectors with live matching counts. | **95% Faster** |
+| **🔍 Tech Stack Profiling** | Detects 40+ technologies across React, Next.js, Vue, Shopify, WordPress, Cloudflare, PostHog, and CDNs in under 1 second. | **Instant** |
+| **🧠 Local ChromaDB RAG & History** | 1ms zero-network caching, semantic concept search, and natural language Q&A strictly grounded in crawled page context. | **Air-Gapped Privacy** |
+| **📄 1-Click Multi-Format Export** | Stream any crawled page or entire crawl sets to **Boardroom PDF**, **Markdown**, **Plain Text**, **JSON**, or **CSV**. | **Instant Download** |
+
+---
+
+## ⚡ Quick Start
 
 ### 1. Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/your-username/ethical-crawler.git
-cd ethical-crawler
+# 1. Clone repository
+git clone https://github.com/nikhil-alakri/odin-eye.git
+cd odin-eye
 
-# Setup virtual environment and install dependencies
+# 2. Setup virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
+
+# 3. Install core dependencies
 pip install -e ".[dev]"
 
-# (Optional) Install browser engine for dynamic JS pages:
+# 4. Install browser engine for dynamic JS apps & screenshots
 pip install -e ".[browser]"
 playwright install chromium
 ```
 
-### 2. Configuration (`.env`)
-
-Copy `.env.example` to `.env` and customize as needed:
+### 2. Configure Environment (`.env`)
 
 ```bash
 cp .env.example .env
 ```
 
-Key environment variables:
-
 ```env
-# Bot Identity
-CRAWLER_BOT_NAME=EthicalCrawlerBot
+# Bot Identification
+CRAWLER_BOT_NAME=OdinEyeBot
 CRAWLER_BOT_VERSION=1.0.0
-CRAWLER_BOT_EMAIL=crawler-contact@example.com
-CRAWLER_BOT_URL=https://github.com/example/ethical-crawler
+CRAWLER_BOT_EMAIL=crawler@example.com
+CRAWLER_BOT_URL=https://github.com/nikhil-alakri/odin-eye
 
-# Politeness Settings
+# Ethical Crawling & Politeness
 CRAWLER_DEFAULT_DELAY=2.0
 CRAWLER_MAX_CONCURRENCY=5
 CRAWLER_RESPECT_ROBOTS_TXT=true
 
-# NVIDIA NIM / OpenAI API
+# Optional: NVIDIA NIM / OpenAI API
 CRAWLER_AI_BASE_URL=https://integrate.api.nvidia.com/v1
-CRAWLER_AI_API_KEY=your_nvidia_or_openai_key_here
+CRAWLER_AI_API_KEY=your_key_here
 CRAWLER_AI_MODEL=meta/llama-3.3-70b-instruct
 ```
 
 ---
 
-## 💻 CLI Usage
+## 💻 CLI Commands
 
-The CLI command is `./crawler` (or `crawler` when installed, or `python -m ethical_crawler.cli`).
+Run using `./crawler` or `python -m ethical_crawler.cli`:
 
-### 1. Scrape & Export
+### 1. Scrape & Instant Boardroom PDF Export
 ```bash
-# Rapid single-page scrape with instant terminal preview
+# Scrape single page with instant terminal summary
 crawler scrape https://example.com
 
-# Scrape and export directly to a boardroom-grade PDF document
-crawler scrape https://example.com --output page.pdf --format pdf
+# Scrape and stream directly into a styled PDF document
+crawler scrape https://example.com --output report.pdf --format pdf
 
-# Scrape and export to clean Markdown or Plain Text
+# Scrape into clean GitHub-Flavored Markdown
 crawler scrape https://example.com --output article.md
-crawler scrape https://example.com --output summary.txt
-
-# Scrape with simultaneous AI structured extraction (NVIDIA NIM / OpenAI)
-crawler scrape https://example.com/article --extract-ai --schema article --output result.json
 ```
 
-### 2. Crawl a Website Ethically
+### 2. Crawl Entire Websites Ethically
 ```bash
-# Basic ethical crawl with live progress bar and table output
-crawler crawl https://example.com --max-pages 5 --output results.json
+# Ethical crawl honoring robots.txt and sitemap
+crawler crawl https://example.com --max-pages 10 --output results.json
 
-# Crawl and export the entire site report into a consolidated PDF
-crawler crawl https://example.com --max-pages 10 --output crawl_report.pdf --format pdf
-
-# Crawl directly from sitemap.xml
-crawler crawl https://example.com --sitemap --max-pages 10 --output sitemap_crawl.csv
-
-# Crawl using Headless Browser for JavaScript-rendered sites
+# Headless browser crawl for client-side JavaScript SPAs
 crawler crawl https://spa-example.com --strategy browser --output results.md
 ```
 
-### 3. Verify robots.txt Directives
+### 3. Verify Robots.txt Directives (Rule 1)
 ```bash
 # Inspect allowed/disallowed rules and crawl-delay
 crawler robots https://example.com
 
-# Test specific path permission
-crawler robots https://example.com --check /admin/settings
+# Check permission for a specific path
+crawler robots https://example.com --check /admin/billing
 ```
 
-### 4. Semantic Search & Local RAG Q&A
+### 4. Local Vector Search & Offline RAG Q&A
 ```bash
-# Search stored crawled knowledge by semantic meaning
-crawler search "pricing plans and refund policy"
+# Search crawled knowledge by semantic concept
+crawler search "pricing tiers and seat limits"
 
-# Ask an AI question answered strictly from previously crawled web pages
-crawler ask "What are the core capabilities and API limits?"
+# Ask an AI question answered strictly from your crawled pages
+crawler ask "What are the key differences between the Free and Pro tiers?"
 
-# View list of all crawled pages stored in the local vector database
+# View local ChromaDB crawl history
 crawler history
 ```
 
-### 5. Launch Web Server & Visual Dashboard
+---
+
+## 🖥️ Interactive Web Dashboard
+
+Launch the visual interface:
+
 ```bash
 crawler serve --host 0.0.0.0 --port 8000
 ```
 
-- Open **Interactive Dashboard**: `http://localhost:8000`
-- Open **Swagger REST API Docs**: `http://localhost:8000/docs`
+Open **`http://localhost:8000`** in your browser:
+
+- 🧭 **Crawler & Scraper Studio**: Launch jobs, inspect live real-time progress, and preview captured DOM structures.
+- 🏛️ **Visual Blueprint Generator**: Generate full architectural dossiers from screenshots and export 6-page boardroom PDFs.
+- 🎯 **Point-and-Click Selector Picker**: Sandboxed interactive visual element selector.
+- 🔄 **Scheduled Crawl Manager**: Configure recurring cron schedules and webhook alerts.
+- 🧠 **Knowledge Store & RAG Chat**: Chat with crawled documentation offline with source citations.
+- 🎨 **Design System Studio**: Switch between Obsidian Dark, Editorial Light, and Custom Color themes.
+- 📚 **Swagger API Docs**: Explore interactive REST endpoints at `http://localhost:8000/docs`.
 
 ---
 
-## 🌐 REST API Endpoints
+## 🌐 REST API Reference
 
 | Method | Endpoint | Description |
 |:---|:---|:---|
-| `GET` | `/health` | Service health status and bot User-Agent |
 | `POST` | `/api/v1/scrape` | Immediate single-page scrape with optional AI extraction |
-| `GET/POST` | `/api/v1/scrape/export` | Scrape any URL and stream back as `.pdf`, `.md`, `.txt`, `.json`, or `.csv` |
+| `GET/POST`| `/api/v1/scrape/export` | Scrape URL and stream back as `.pdf`, `.md`, `.txt`, `.json`, or `.csv` |
 | `POST` | `/api/v1/crawl` | Start asynchronous crawl job (returns `job_id`) |
-| `GET` | `/api/v1/jobs/{job_id}` | Check status and results of a crawl job |
-| `GET` | `/api/v1/jobs/{job_id}/export` | Download crawl results in requested format (`?format=pdf\|md\|txt\|json\|csv`) |
-| `GET` | `/api/v1/history` | Retrieve list of all pages persistently stored in ChromaDB |
-| `GET` | `/api/v1/history/page` | Retrieve full cached markdown and metadata for a stored page |
-| `GET` | `/api/v1/history/export` | 1-Click re-export of a cached page to PDF, MD, TXT, JSON, or CSV |
-| `GET` | `/api/v1/search` | Semantic vector search across all stored web pages (`?q=...&domain=...`) |
-| `POST` | `/api/v1/ask` | RAG Q&A answering questions strictly from crawled web pages with citations |
-| `GET` | `/api/v1/robots?url={url}` | Retrieve parsed robots.txt directives |
-| `GET` | `/api/v1/sitemap?url={url}` | Retrieve all URLs declared in sitemap.xml |
-| `POST` | `/api/v1/extract` | Extract structured schema using NVIDIA NIM / OpenAI |
-| `GET` | `/api/v1/blueprints/domains` | List domains with available screenshot collections for blueprinting |
-| `POST` | `/api/v1/blueprints/generate` | Generate full reverse-engineered architecture blueprint from screenshots |
-| `GET` | `/api/v1/blueprints/export/pdf` | Export publication-grade 6-page boardroom PDF blueprint |
-| `POST` | `/api/v1/schedules` | Create automated cron crawl schedule with diff monitoring & webhooks |
-| `GET` | `/api/v1/schedules` | List active crawl schedules and historical diff alerts |
-| `GET` | `/api/v1/element-picker/sandbox` | Load URL inside interactive CSS selector picker sandbox |
+| `GET` | `/api/v1/jobs/{job_id}` | Check status, progress, and results of a crawl job |
+| `GET` | `/api/v1/blueprints/domains` | List domains with captured screenshots available for blueprinting |
+| `POST` | `/api/v1/blueprints/generate` | Synthesize ERD schema, APIs, and wireframes from screenshots |
+| `GET` | `/api/v1/blueprints/export/pdf` | Export boardroom-grade 6-page executive PDF blueprint |
+| `POST` | `/api/v1/schedules` | Create recurring cron crawl schedule with diff monitoring & webhooks |
+| `GET` | `/api/v1/schedules` | List active crawl schedules and historical change alerts |
+| `GET` | `/api/v1/element-picker/sandbox`| Interactive sandboxed visual CSS selector picker |
 | `POST` | `/api/v1/tech-profile` | Scan target website for frameworks, CMS, analytics & infrastructure |
-| `GET` | `/api/v1/themes` | List available Design System Studio themes and styling presets |
+| `GET` | `/api/v1/search` | Semantic vector search across all stored web pages (`?q=...`) |
+| `POST` | `/api/v1/ask` | Local RAG Q&A answering strictly from crawled context |
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Running the Test Suite
+
+All 23+ unit, scenario, and API tests run fully offline without live external network dependencies:
 
 ```bash
-# Run all unit and scenario tests
 PYTHONPATH=src python3 -m pytest tests/ -v
-
-# Run specific feature tests
-PYTHONPATH=src python3 -m pytest tests/test_visual_blueprint.py -v
-PYTHONPATH=src python3 -m pytest tests/test_diff_engine.py -v
-PYTHONPATH=src python3 -m pytest tests/test_element_picker.py -v
-PYTHONPATH=src python3 -m pytest tests/test_tech_profiler.py -v
 ```
 
 ---
 
-## 🛡️ Edge-Case Handling & Reliability
+## 📖 Deep-Dive Documentation
 
-1. **Spider Traps & Endless Loops**: Tracking parameters (`utm_*`, `ref`, `sessionid`) and URL fragments are stripped; URLs are normalized and deduplicated; strict `max_depth` limits prevent infinite loops.
-2. **Non-HTML & Binary Files**: Content-Type header streaming check rejects multi-gigabyte ISOs, PDFs, videos, and archives before downloading bodies.
-3. **HTTP 429 Rate Limiting**: Honors `Retry-After` headers and pauses domain workers dynamically.
-4. **JavaScript SPAs**: Auto-escalates from lightweight HTTP to Playwright headless browser when empty container roots are detected.
-5. **Database Preservation**: Strict non-destructive upsert policy guarantees zero data loss and persistent local caching.
+- **[USAGE GUIDE (Why, When, Where, How, Time Savings)](USAGE.md)**: Deep architectural guide, comparison tables, and full walkthroughs.
+- **[FREQUENTLY ASKED QUESTIONS (FAQ)](FAQ.md)**: Answers on ethics, vision models, diff false-alarm filtering, and compliance.
+- **[Architecture Specifications](Raw/features/)**: Complete internal design documents and implementation records.
 
 ---
 
-## 📄 License
+## 🛡️ License & Community
 
-MIT License. Free and open-source for personal and commercial use.
+Distributed under the **MIT License**. Free and open-source for personal and commercial use. See [`LICENSE`](LICENSE) for details.
+
+<p align="center">
+  <strong>Built with precision for ethical web engineering. If Odin-Eye helps your workflow, please consider giving it a ⭐ on GitHub!</strong>
+</p>
