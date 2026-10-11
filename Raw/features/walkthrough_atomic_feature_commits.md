@@ -110,3 +110,4 @@ d19c3f1 feat(intel): competitive intelligence comparator, tech profiler & PDF ex
 3. **Automated Tests**:
    - Tested across blueprint, diff engine, element picker, tech profiler, and theme modules:
    - `pytest`: **23 passed in 1.24s**.
+

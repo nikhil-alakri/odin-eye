@@ -1,56 +1,51 @@
-# 🕷️ Ethical AI-Native Web Crawler
+# 🕷️ Ethical AI-Native Web Crawler & Reverse-Engineering Platform
 
-A production-ready, open-source, ethical web crawler and data extraction framework built in Python 3.12+, strictly following the **4 Rules of Ethical Web Crawling** with modern AI-native and LLM-friendly extraction capabilities (compatible with **NVIDIA NIM** and **OpenAI** APIs).
-
----
-
-## 🌟 Key Features & The 4 Ethical Rules
-
-### 1. Check robots.txt (Rule 1)
-- **Automatic Discovery**: Derives `{domain}/robots.txt` automatically.
-- **Rule Matching**: Parses `User-agent`, `Allow`, `Disallow`, `Crawl-delay`, and `Sitemap` declarations.
-- **Pre-fetch Verification**: Validates whether URLs are permitted before any fetch attempt.
-- **In-Memory Cache**: High-performance domain policy cache with configurable TTL.
-- **Resilient Fallback**: Gracefully handles missing (404), empty, or malformed `robots.txt` files.
-
-### 2. Implement Politeness Delay & Rate Limiting (Rule 2)
-- **Per-Domain Delays**: Enforces minimum delay (default 2.0s or honoring robots.txt `Crawl-delay`).
-- **HTTP 429 Retry-After**: Parses and honors `Retry-After` response headers (seconds or HTTP-dates).
-- **Concurrency Throttling**: Global and per-domain semaphore controls to prevent overwhelming servers.
-- **Exponential Backoff**: Jittered backoff upon consecutive server errors (503/500).
-
-### 3. Set Identifiable User-Agent Header (Rule 3)
-- **Transparent Bot Identity**: Standard format `BotName/Version (+DocumentationURL; ContactEmail)`.
-- **Customizable**: Configurable via `.env` or settings.
-- **Polite Headers**: Sends `DNT: 1` (Do Not Track), standard `Accept`, and gzip compression.
-
-### 4. Sitemap Discovery & Recursive Parsing (Rule 4)
-- **Structured URL Discovery**: Directly parses `<urlset>` and `<sitemapindex>` to crawl target URLs without blind link crawling.
-- **Compressed Sitemap Support**: Handles `.xml.gz` and gzip byte streams seamlessly.
-- **Sitemap Mode**: Direct batch crawl from sitemaps with priority and lastmod filtering.
+A production-ready, open-source, ethical web crawler, full-stack reverse-engineering suite, and intelligence framework built in Python 3.12+, strictly adhering to the **4 Rules of Ethical Web Crawling** with modern AI-native and multimodal extraction capabilities (compatible with **NVIDIA NIM** and **OpenAI** APIs).
 
 ---
 
-## 🤖 Modern AI-Native & Dual-Engine Architecture
+## 📚 Quick Documentation Index
 
-- **Dual-Engine Crawling**:
-  - **Fast Async Engine (`httpx`)**: Blazing fast, lightweight, and resource-efficient for static pages and APIs.
-  - **Browser Engine (`playwright`)**: Headless browser for JavaScript SPAs with auto-escalation when empty DOM containers or loading placeholders are detected.
-- **LLM-Friendly Content Cleaning**:
-  - Strips ads, navigation bars, cookie banners, tracker scripts, SVG, and footer noise.
-  - Generates clean, token-efficient GitHub-Flavored Markdown.
-  - Extracts OpenGraph, Twitter cards, and JSON-LD structured schemas.
-- **AI Structured Extraction Layer**:
-  - Fully compatible with **NVIDIA NIM** (`https://integrate.api.nvidia.com/v1`, models like `meta/llama-3.3-70b-instruct`) and OpenAI API format.
-  - Built-in Pydantic extraction schemas for `Article`, `Product`, `FAQ`, and `Custom` prompt instructions.
-- **Multiple Export Formats**:
-  - Output to JSON (with metadata envelope), JSONL, Markdown, Plain Text, CSV, PDF, or SQLite database.
-- **Embedded ChromaDB Vector Knowledge Base & Caching**:
-  - **Zero-Network Cache**: Automatically caches crawled pages locally; subsequent requests within TTL (default 7 days) resolve in 1ms with 0 network calls.
-  - **Semantic Vector Search**: Search your crawled knowledge base by concepts and meaning (`crawler search "<query>"` or UI).
-  - **Local RAG Q&A ("Chat with Crawled Sites")**: Ask natural language questions answered strictly from stored page context with source citations.
-  - **1-Click Historical Re-Exports**: Re-export any previously crawled page to PDF, Markdown, Plain Text, JSON, or CSV anytime without re-crawling.
-  - **Strict Non-Destructive Storage**: Uses safe `upsert` semantics that preserve all historical data.
+- **[📖 USAGE GUIDE (Why, When, Where, How, Time-Saving)](USAGE.md)**: Deep dive into all architectural capabilities, time savings, and step-by-step workflows.
+- **[❓ FREQUENTLY ASKED QUESTIONS (FAQ)](FAQ.md)**: Answers regarding ethics, AI vision models, data preservation, and diff alerts.
+- **[📁 Architecture & Feature Plans](Raw/features/)**: Detailed implementation plans, specs, and walkthroughs for every system feature.
+
+---
+
+## 🌟 Core System Capabilities
+
+### 1. The 4 Rules of Ethical Web Crawling
+- **Rule 1: Check `robots.txt`**: Automatically verifies allowed/disallowed paths and respects `Crawl-delay` and `Sitemap` declarations with in-memory TTL caching.
+- **Rule 2: Politeness Delay & Rate Limiting**: Enforces per-domain delays, concurrency semaphores, and exponential backoff, honoring HTTP 429 `Retry-After`.
+- **Rule 3: Identifiable User-Agent**: Sends transparent bot identification with version, documentation link, and contact email.
+- **Rule 4: Sitemap Discovery**: Automatically parses XML and gzipped (`.xml.gz`) sitemaps for structured, non-invasive URL discovery.
+
+### 2. Autonomous Visual Reverse-Engineering & Blueprint Synthesis
+- **Domain Archetype Classification**: Identifies platform categories (Media & Studio Production, E-Commerce, DevTools, Enterprise SaaS).
+- **Pixel Palette Extraction**: Samples screenshot pixels using Pillow (PIL) to extract authentic brand primary, accent, surface, and typography colors.
+- **Relational Data Architecture (ERD)**: Infers complete backend database models with primary keys, foreign keys, data types, and multiplicities.
+- **Inferred REST API Contracts**: Synthesizes endpoints, HTTP methods, headers, query params, request bodies, and expected responses.
+- **Frontend Component Hierarchy**: Maps Atomic Design layouts into Organisms, Molecules, and Atoms.
+- **Boardroom-Grade Executive PDF Export**: Assembles a publication-ready 6-page boardroom PDF report with clean typography and vector wireframes.
+
+### 3. Scheduled Crawling, Content Diff Engine & Alerts
+- **Cron-Scheduled Background Crawling**: Recurring crawlers monitor key pages on customizable cron intervals.
+- **Normalized Content Diffing**: Strips dynamic noise, timestamps, and CSRF tokens to compute genuine content deltas.
+- **Instant Webhook Alerts**: Dispatches formatted diff summaries to Slack or Discord when changes exceed configured thresholds.
+
+### 4. Interactive CSS Element Selector & Visual Picker
+- **Point-and-Click Selector Tool**: Safely loads websites in a sandboxed iframe with scripts stripped.
+- **Resilient Selector Engine**: Calculates optimal CSS selectors and verifies matching element counts live in the browser.
+
+### 5. Competitive Intelligence & Technology Profiler
+- **Tech Stack Profiling**: Detects 40+ technologies across frameworks (React, Next.js, Vue), CMS (WordPress, Shopify), analytics (PostHog, GA4), and infrastructure.
+- **Cross-Domain Competitive Matrix**: Compares multiple competitor websites side-by-side.
+
+### 6. Embedded ChromaDB Vector Knowledge Base & Local RAG Q&A
+- **Zero-Network Cache**: Stores crawled pages locally in ChromaDB; recurring queries resolve in 1ms with zero network requests.
+- **Semantic Vector Search**: Search crawled knowledge by concept rather than just keywords.
+- **Local RAG Q&A ("Chat with Crawled Sites")**: Ask natural language questions answered strictly from stored page context with source citations.
+- **Strict Database Preservation**: Non-destructive upsert architecture ensures historical data is never wiped or lost.
 
 ---
 
@@ -107,13 +102,12 @@ CRAWLER_AI_MODEL=meta/llama-3.3-70b-instruct
 
 The CLI command is `./crawler` (or `crawler` when installed, or `python -m ethical_crawler.cli`).
 
-### 1. Scrape a Single Web Page & Export to Any Format (PDF, MD, TXT, JSON, CSV)
-
+### 1. Scrape & Export
 ```bash
 # Rapid single-page scrape with instant terminal preview
 crawler scrape https://example.com
 
-# Scrape and export directly to a styled PDF document
+# Scrape and export directly to a boardroom-grade PDF document
 crawler scrape https://example.com --output page.pdf --format pdf
 
 # Scrape and export to clean Markdown or Plain Text
@@ -125,7 +119,6 @@ crawler scrape https://example.com/article --extract-ai --schema article --outpu
 ```
 
 ### 2. Crawl a Website Ethically
-
 ```bash
 # Basic ethical crawl with live progress bar and table output
 crawler crawl https://example.com --max-pages 5 --output results.json
@@ -140,8 +133,7 @@ crawler crawl https://example.com --sitemap --max-pages 10 --output sitemap_craw
 crawler crawl https://spa-example.com --strategy browser --output results.md
 ```
 
-### 3. Verify robots.txt Directives (Rule 1)
-
+### 3. Verify robots.txt Directives
 ```bash
 # Inspect allowed/disallowed rules and crawl-delay
 crawler robots https://example.com
@@ -150,39 +142,7 @@ crawler robots https://example.com
 crawler robots https://example.com --check /admin/settings
 ```
 
-### 4. Parse and View Sitemap URLs (Rule 4)
-
-```bash
-# Inspect sitemap URLs and export to CSV
-crawler sitemap https://example.com --output urls.csv
-```
-
-### 5. AI-Native Structured Data Extraction
-
-Extract structured data using NVIDIA NIM or OpenAI models:
-
-```bash
-# Extract article summary and key points
-crawler extract https://example.com/article --schema article --output article.json
-
-# Extract e-commerce product specs and pricing
-crawler extract https://store.example.com/product/123 --schema product
-
-# Custom prompt extraction
-crawler extract https://example.com/pricing --schema custom --prompt "Extract all pricing tiers, monthly costs, and feature limits"
-```
-
-### 6. Visual Document & Screenshot Parsing (Nemotron-Parse 2.0)
-
-For complex document scans, PDF pages, charts, or full-page browser screenshots:
-
-```bash
-# Parse visual document image into layout-classified markdown & bounding boxes
-crawler parse-image screenshot.png --task markdown_bbox
-```
-
-### 7. Semantic Vector Search, RAG Q&A, and Saved History (ChromaDB)
-
+### 4. Semantic Search & Local RAG Q&A
 ```bash
 # Search stored crawled knowledge by semantic meaning
 crawler search "pricing plans and refund policy"
@@ -194,18 +154,12 @@ crawler ask "What are the core capabilities and API limits?"
 crawler history
 ```
 
-### 8. Start Web Server & UI Dashboard
-
+### 5. Launch Web Server & Visual Dashboard
 ```bash
-# Start FastAPI service and visual dashboard
 crawler serve --host 0.0.0.0 --port 8000
 ```
 
 - Open **Interactive Dashboard**: `http://localhost:8000`
-  - Includes **Website Crawler**, **Single Page Scraper**, and **🧠 Knowledge & History** tabs.
-  - Interactive **1-Click Export Buttons**: 📄 PDF, 📝 Markdown, 📃 Plain Text, 🗄️ JSON, 📊 CSV.
-  - Built-in **Semantic Search Bar** and **Ask AI (RAG)** assistant.
-  - Re-export historical crawls instantly without re-crawling.
 - Open **Swagger REST API Docs**: `http://localhost:8000/docs`
 
 ---
@@ -213,21 +167,29 @@ crawler serve --host 0.0.0.0 --port 8000
 ## 🌐 REST API Endpoints
 
 | Method | Endpoint | Description |
-|:-------|:---------|:------------|
+|:---|:---|:---|
 | `GET` | `/health` | Service health status and bot User-Agent |
 | `POST` | `/api/v1/scrape` | Immediate single-page scrape with optional AI extraction |
-| `GET/POST`| `/api/v1/scrape/export` | Scrape any URL and stream back as `.pdf`, `.md`, `.txt`, `.json`, or `.csv` |
+| `GET/POST` | `/api/v1/scrape/export` | Scrape any URL and stream back as `.pdf`, `.md`, `.txt`, `.json`, or `.csv` |
 | `POST` | `/api/v1/crawl` | Start asynchronous crawl job (returns `job_id`) |
 | `GET` | `/api/v1/jobs/{job_id}` | Check status and results of a crawl job |
 | `GET` | `/api/v1/jobs/{job_id}/export` | Download crawl results in requested format (`?format=pdf\|md\|txt\|json\|csv`) |
 | `GET` | `/api/v1/history` | Retrieve list of all pages persistently stored in ChromaDB |
 | `GET` | `/api/v1/history/page` | Retrieve full cached markdown and metadata for a stored page |
-| `GET` | `/api/v1/history/export`| 1-Click re-export of a cached page to PDF, MD, TXT, JSON, or CSV |
+| `GET` | `/api/v1/history/export` | 1-Click re-export of a cached page to PDF, MD, TXT, JSON, or CSV |
 | `GET` | `/api/v1/search` | Semantic vector search across all stored web pages (`?q=...&domain=...`) |
 | `POST` | `/api/v1/ask` | RAG Q&A answering questions strictly from crawled web pages with citations |
 | `GET` | `/api/v1/robots?url={url}` | Retrieve parsed robots.txt directives |
 | `GET` | `/api/v1/sitemap?url={url}` | Retrieve all URLs declared in sitemap.xml |
 | `POST` | `/api/v1/extract` | Extract structured schema using NVIDIA NIM / OpenAI |
+| `GET` | `/api/v1/blueprints/domains` | List domains with available screenshot collections for blueprinting |
+| `POST` | `/api/v1/blueprints/generate` | Generate full reverse-engineered architecture blueprint from screenshots |
+| `GET` | `/api/v1/blueprints/export/pdf` | Export publication-grade 6-page boardroom PDF blueprint |
+| `POST` | `/api/v1/schedules` | Create automated cron crawl schedule with diff monitoring & webhooks |
+| `GET` | `/api/v1/schedules` | List active crawl schedules and historical diff alerts |
+| `GET` | `/api/v1/element-picker/sandbox` | Load URL inside interactive CSS selector picker sandbox |
+| `POST` | `/api/v1/tech-profile` | Scan target website for frameworks, CMS, analytics & infrastructure |
+| `GET` | `/api/v1/themes` | List available Design System Studio themes and styling presets |
 
 ---
 
@@ -235,13 +197,13 @@ crawler serve --host 0.0.0.0 --port 8000
 
 ```bash
 # Run all unit and scenario tests
-make test
-# Or directly with pytest:
-.venv/bin/pytest -v
+PYTHONPATH=src python3 -m pytest tests/ -v
 
-# Run code linter and formatter
-make lint
-make format
+# Run specific feature tests
+PYTHONPATH=src python3 -m pytest tests/test_visual_blueprint.py -v
+PYTHONPATH=src python3 -m pytest tests/test_diff_engine.py -v
+PYTHONPATH=src python3 -m pytest tests/test_element_picker.py -v
+PYTHONPATH=src python3 -m pytest tests/test_tech_profiler.py -v
 ```
 
 ---
@@ -252,10 +214,10 @@ make format
 2. **Non-HTML & Binary Files**: Content-Type header streaming check rejects multi-gigabyte ISOs, PDFs, videos, and archives before downloading bodies.
 3. **HTTP 429 Rate Limiting**: Honors `Retry-After` headers and pauses domain workers dynamically.
 4. **JavaScript SPAs**: Auto-escalates from lightweight HTTP to Playwright headless browser when empty container roots are detected.
+5. **Database Preservation**: Strict non-destructive upsert policy guarantees zero data loss and persistent local caching.
 
 ---
 
 ## 📄 License
 
 MIT License. Free and open-source for personal and commercial use.
-
