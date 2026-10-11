@@ -172,3 +172,4 @@ Traditional web scrapers produce unstructured blobs of HTML or messy text that r
    - **Cyberpunk Neon** (vibrant high-tech aesthetic)
    - **Nordic Minimalist** (cool-toned Scandinavian palette)
 3. Customize typography pairings, border radiuses, and surface elevations. All preferences are preserved in local storage.
+

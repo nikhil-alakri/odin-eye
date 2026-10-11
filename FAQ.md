@@ -103,3 +103,4 @@ The codebase enforces a strict **Database Preservation Constraint**:
 PYTHONPATH=src python3 -m pytest tests/ -v
 ```
 All unit tests, scenario tests, and API integration tests run locally without requiring live external internet connections.
+
