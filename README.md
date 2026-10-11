@@ -237,7 +237,6 @@ PYTHONPATH=src python3 -m pytest tests/ -v
 
 - **[USAGE GUIDE (Why, When, Where, How, Time Savings)](USAGE.md)**: Deep architectural guide, comparison tables, and full walkthroughs.
 - **[FREQUENTLY ASKED QUESTIONS (FAQ)](FAQ.md)**: Answers on ethics, vision models, diff false-alarm filtering, and compliance.
-- **[Architecture Specifications](Raw/features/)**: Complete internal design documents and implementation records.
 
 ---
 

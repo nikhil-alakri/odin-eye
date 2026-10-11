@@ -57,7 +57,16 @@ tmp/
 scratch/
 
 # Local Agent Skills library
-.agents/skills/
+.agents/
 data/ask_cache.json
 data/schedules.json
 data/screenshots/
+
+# Internal documentation & private playbooks
+Raw/
+content/
+cursor-grok-content/
+opencode-glimmer-content/
+MARKETING_PLAYBOOK.md
+github-ruleset-*.json
+
